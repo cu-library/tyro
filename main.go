@@ -46,16 +46,9 @@ var (
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
  
-    token := ""
- 
-    select {
-        case token = <-tokenChan:
-            logIfVerbose("Received token from internal source.")
-        case <-time.After(20 * time.Second):
-            logIfVerbose("Token Error")
-    }
+    token := <-tokenChan            
 
-    if token == "" {
+    if token == "uninitialized" {
       http.Error(w, "Token Error, likely not yet generated.", http.StatusInternalServerError)
       return
     }
@@ -70,17 +63,12 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
 
-    token := ""
- 
-    select {
-        case token = <-tokenChan:
-            logIfVerbose("Received token from internal source.")
-        case <-time.After(20 * time.Second):
-            logIfVerbose("Token Error")
-    }
+    time.Sleep(2 * time.Second)
 
-    if token == "" {
-      http.Error(w, "Token Error.", http.StatusInternalServerError)
+    token := <-tokenChan            
+
+    if token == "uninitialized" {
+      http.Error(w, "Token Error, likely not yet generated.", http.StatusInternalServerError)
       return
     }
 
@@ -189,13 +177,10 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 func rawRewriter(r *http.Request) { 
 
-    token := ""
- 
-    select {
-        case token = <-tokenChan:
-            logIfVerbose("Received token from internal source.")
-        case <-time.After(20 * time.Second):
-            logIfVerbose("Token Error")
+    token := <-tokenChan            
+
+    if token == "uninitialized" {
+      logIfVerbose("Token Error")
     }
 
     parsedApiUrl, err := url.Parse(*apiUrl)

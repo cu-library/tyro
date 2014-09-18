@@ -3,30 +3,50 @@
     <script type="text/javascript" src="jquery-2.1.1.min.js"></script>
     <script type="text/javascript">
     $(function() {
-        $("div.getStatus").each(function() {            
+        $("div.getStatus").each(function() {
+            $(this).append("<img src=\"loading.gif\" class=\"loading-indicator\" />");            
             var jsonUrl = "../status/"+$(this).attr("data-bibID");
             var parent = $(this);
-            $.getJSON( jsonUrl, function( response ) {
-                $.each(response.Entries, function() {
-                    if (this.Status.lastIndexOf("IN LIBRARY", 0) === 0){
-                       parent.append("<p style=\"color:green\">"+this.Status+"</p>");
-                    }     
-                    else {
-                       parent.append("<p style=\"color:red\">"+this.Status+"</p>");
-                    }               
-                    parent.append("<p>"+this.Location+"</p>");
-                    parent.append("<p>"+this.CallNumber+"</p>");
-                });
+            $.ajax({
+                url: jsonUrl,
+                dataType: 'json',
+                success: function( data ) {
+                    $.each(data.Entries, function() {
+                        parent.children("img").remove();
+                        if (this.Status.lastIndexOf("IN LIBRARY", 0) === 0){
+                           parent.append("<p style=\"color:green\">"+this.Status+"</p>");
+                        }     
+                        else {
+                           parent.append("<p style=\"color:red\">"+this.Status+"</p>");
+                        }               
+                        parent.append("<p>"+this.Location+"</p>");
+                        parent.append("<p>"+this.CallNumber+"</p>");
+                    });
+                },
+                error: function( data ) {
+                    parent.children("img").remove();   
+                    parent.append("<p>Unable to Retrieve Status</p>");
+                }
+            });
+            $.ajax( jsonUrl, function( response ) {
+
             });
         });
      });    
     </script>
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+
 </head>
 <body>
+    <div class="container">
     <h1>This is the javascript test page.</h1> 
     <hr>
-    <div class="getStatus" data-bibID="3252898">Item with BibID 3252989</div>
+    <div class="getStatus" data-bibID="3252898"><p>Item with BibID 3252989</p><p>Status:</p></div>
     <hr>
-    <div class="getStatus" data-bibID="2401597">Item with BibID 2401597</div>
+    <div class="getStatus" data-bibID="2401597"><p>Item with BibID 2401597</p><p>Status:</p></div>
+    </div>
 </body>
 </html>
