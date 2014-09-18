@@ -1,0 +1,32 @@
+<html>
+<head>
+    <script type="text/javascript" src="jquery-2.1.1.min.js"></script>
+    <script type="text/javascript">
+    $(function() {
+        $("div.getStatus").each(function() {            
+            var jsonUrl = "../status/"+$(this).attr("data-bibID");
+            var parent = $(this);
+            $.getJSON( jsonUrl, function( response ) {
+                $.each(response.Entries, function() {
+                    if (this.Status.lastIndexOf("IN LIBRARY", 0) === 0){
+                       parent.append("<p style=\"color:green\">"+this.Status+"</p>");
+                    }     
+                    else {
+                       parent.append("<p style=\"color:red\">"+this.Status+"</p>");
+                    }               
+                    parent.append("<p>"+this.Location+"</p>");
+                    parent.append("<p>"+this.CallNumber+"</p>");
+                });
+            });
+        });
+     });    
+    </script>
+</head>
+<body>
+    <h1>This is the javascript test page.</h1> 
+    <hr>
+    <div class="getStatus" data-bibID="3252898">Item with BibID 3252989</div>
+    <hr>
+    <div class="getStatus" data-bibID="2401597">Item with BibID 2401597</div>
+</body>
+</html>
