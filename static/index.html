@@ -13,14 +13,19 @@
                 success: function( data ) {
                     $.each(data.Entries, function() {
                         parent.children("img").remove();
+                        var status = "<p class=\"ajax-status\">";                        
                         if (this.Status.lastIndexOf("IN LIBRARY", 0) === 0){
-                           parent.append("<p style=\"color:green\">"+this.Status+"</p>");
+                           status += "<span class=\"glyphicon glyphicon-ok\"></span>";
+                           status += "<span style=\"color:green\"> "+this.Status+"</span>";
                         }     
                         else {
-                           parent.append("<p style=\"color:red\">"+this.Status+"</p>");
+                           status += "<span class=\"glyphicon glyphicon-remove\"></span>";
+                           status += "<span style=\"color:red\"> "+this.Status+"</span>";
                         }               
-                        parent.append("<p>"+this.Location+"</p>");
-                        parent.append("<p>"+this.CallNumber+"</p>");
+                        status += "<span>"+" "+this.Location+"</span>";
+                        status += "<span>"+" "+this.CallNumber+"</span>";
+                        status += "</p>"
+                        parent.append(status)
                     });
                 },
                 error: function( data ) {
@@ -42,11 +47,14 @@
 </head>
 <body>
     <div class="container">
-    <h1>This is the javascript test page.</h1> 
-    <hr>
-    <div class="getStatus" data-bibID="3252898"><p>Item with BibID 3252989</p><p>Status:</p></div>
-    <hr>
-    <div class="getStatus" data-bibID="2401597"><p>Item with BibID 2401597</p><p>Status:</p></div>
+        <h1>This is the javascript test page.</h1> 
+        <hr>
+        <div class="getStatus" data-bibID="3252898"><p>Item with BibID 3252989</p><p>Status:</p></div>
+        <hr>
+        <div class="getStatus" data-bibID="2401597"><p>Item with BibID 2401597</p><p>Status:</p></div>
+        <hr>
+        <div class="getStatus" data-bibID="1399049"><p>Item with BibID 1399049</p><p>Status:</p></div>
+        
     </div>
 </body>
 </html>

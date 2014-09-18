@@ -63,8 +63,6 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
 
-    time.Sleep(2 * time.Second)
-
     token := <-tokenChan            
 
     if token == "uninitialized" {
