@@ -45,7 +45,7 @@ Tyro provides the following URLs (endpoints?, routes?)
 
 This software is still in alpha, and is more of a test of writing in Go and using the Sierra API. Upcoming features:
 
-1) CORS support, to let it be used as a public API. 
-2) Cleaning up debugging, better logging.
-3) Tests and CI. 
-4) Things your create an issue for! 
+1. CORS support, to let it be used as a public API. 
+2. Cleaning up debugging, better logging.
+3. Tests and CI. 
+4. Things your create an issue for! 
