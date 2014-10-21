@@ -10,13 +10,13 @@ Tyro is a standalone executable, written in Go. It should compile in Go 1.3. A w
 
 Tyro requires the following command line options: 
 
-    -key= : a client key obtained from your [Sierra API](https://sandbox.iii.com/docs/Default.htm#authAuth.htm)
+    -key= : a client key obtained from your Sierra API, doc here: https://sandbox.iii.com/docs/Default.htm#authAuth.htm
     -secret= : a client secret created for the client key
     -url= : the url for the Sierra API. (For example, the sandbox is https://sandbox.iii.com/iii/sierra-api/v1/)
 
 These options are optional: 
 
-    -address= : The address to serve on, passed to [ListenAndServe](http://golang.org/pkg/net/http/#ListenAndServe). Defaults to ":8877". 
+    -address= : The address to serve on, passed to ListenAndServe, doc here: http://golang.org/pkg/net/http/#ListenAndServe. Defaults to ":8877". 
     -v : The verbose flag. Prints debugging information.
 
 These flags can also be supplied by environment variables:
