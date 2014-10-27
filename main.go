@@ -170,6 +170,13 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+    if resp.StatusCode == 401 {
+        http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
+        logIfVerbose("Internal Server Error at /status/ handler, token is out of date.")
+        refreshTokenChan <- true
+        return
+    }
+
 	var responseJson struct {
 		Entries []struct {
 			CallNumber string `json:"callNumber"`
