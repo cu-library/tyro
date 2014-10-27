@@ -37,12 +37,14 @@ const DefaultAddress string = ":8877"
 //Will we run in verbose mode?
 const DefaultVerbose bool = false
 
-//Cert
+//The default value for the certificate file location
 const DefaultCertFile string = ""
+
+//The default value for the key file location
 const DefaultKeyFile string = ""
 
 //API URL
-const DefaultUrl string = "https://sandbox.iii.com/iii/sierra-api/v1/"
+const DefaultURL string = "https://sandbox.iii.com/iii/sierra-api/v1/"
 
 //API Endpoints
 const TokenRequestEndpoint string = "token"
@@ -51,7 +53,7 @@ const ItemRequestEndpoint string = "items"
 var (
 	address      = flag.String("address", DefaultAddress, "Address for the server to bind on.")
 	verbose      = flag.Bool("v", DefaultVerbose, "Print debugging information.")
-	apiUrl       = flag.String("url", DefaultUrl, "API url.")
+	apiURL       = flag.String("url", DefaultURL, "API url.")
 	certFile     = flag.String("certfile", DefaultCertFile, "Certificate file location.")
 	keyFile      = flag.String("keyfile", DefaultKeyFile, "Private key file location.")
 	clientKey    = flag.String("key", "", "Client Key")
@@ -81,7 +83,7 @@ func main() {
 	logIfVerbose("Serving on address: " + *address)
 	logIfVerbose("Using Client Key: " + *clientKey)
 	logIfVerbose("Using Client Secret: " + *clientSecret)
-	logIfVerbose("Connecting to API URL: " + *apiUrl)
+	logIfVerbose("Connecting to API URL: " + *apiURL)
 
 	if *certFile != DefaultCertFile {
 		logIfVerbose("Going to try to serve through HTTPS")
@@ -142,13 +144,13 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parsedApiUrl, err := url.Parse(*apiUrl)
+	parsedAPIURL, err := url.Parse(*apiURL)
 	if err != nil {
 		//No recovery possible here, probable problem with URL
 		log.Fatal(err)
 	}
 
-	itemStatusURL := parsedApiUrl
+	itemStatusURL := parsedAPIURL
 	itemStatusURL.Path = path.Join(itemStatusURL.Path, ItemRequestEndpoint)
 
 	q := itemStatusURL.Query()
@@ -180,7 +182,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var responseJson struct {
+	var responseJSON struct {
 		Entries []struct {
 			CallNumber string `json:"callNumber"`
 			Status     struct {
@@ -192,7 +194,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		} `json:"entries"`
 	}
 
-	err = json.NewDecoder(resp.Body).Decode(&responseJson)
+	err = json.NewDecoder(resp.Body).Decode(&responseJSON)
 	defer resp.Body.Close()
 	if err != nil {
 		http.Error(w, "JSON Decoding Error", http.StatusInternalServerError)
@@ -207,11 +209,11 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		Location   string
 	}
 
-	var statusJson struct {
+	var statusJSON struct {
 		Entries []Entry
 	}
 
-	for _, responseEntry := range responseJson.Entries {
+	for _, responseEntry := range responseJSON.Entries {
 		newEntry := Entry{}
 		newEntry.CallNumber = responseEntry.CallNumber
 		newEntry.CallNumber = strings.Replace(newEntry.CallNumber, "|a", " ", -1)
@@ -223,10 +225,10 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		newEntry.Location = responseEntry.Location.Name
 
-		statusJson.Entries = append(statusJson.Entries, newEntry)
+		statusJSON.Entries = append(statusJSON.Entries, newEntry)
 	}
 
-	json, err := json.MarshalIndent(statusJson, "", "   ")
+	json, err := json.MarshalIndent(statusJSON, "", "   ")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -251,13 +253,13 @@ func rawRewriter(r *http.Request) {
 		return
 	}
 
-	parsedApiUrl, err := url.Parse(*apiUrl)
+	parsedAPIURL, err := url.Parse(*apiURL)
 	if err != nil {
 		//No recovery possible here, probable problem with URL
 		log.Fatal(err)
 	}
 
-	rawRequestURL := parsedApiUrl
+	rawRequestURL := parsedAPIURL
 	rawRequestURL.Path = path.Join(rawRequestURL.Path, r.URL.Path[len("/raw/"):])
 	rawRequestURL.RawQuery = r.URL.RawQuery
 
@@ -303,13 +305,13 @@ func tokener() {
 				}
 			}()
 
-			parsedApiUrl, err := url.Parse(*apiUrl)
+			parsedAPIURL, err := url.Parse(*apiURL)
 			if err != nil {
 				//No recovery possible here, probable problem with URL
 				log.Fatal(err)
 			}
 
-			tokenRequestURL := parsedApiUrl
+			tokenRequestURL := parsedAPIURL
 			tokenRequestURL.Path = path.Join(tokenRequestURL.Path, TokenRequestEndpoint)
 
 			bodyValues := url.Values{}
@@ -334,9 +336,9 @@ func tokener() {
 				return
 			}
 
-			var responseJson AuthTokenResponse
+			var responseJSON AuthTokenResponse
 
-			err = json.NewDecoder(resp.Body).Decode(&responseJson)
+			err = json.NewDecoder(resp.Body).Decode(&responseJSON)
 			defer resp.Body.Close()
 			if err != nil {
 				token = ""
@@ -346,17 +348,17 @@ func tokener() {
 				return
 			}
 
-			logIfVerbose(responseJson)
+			logIfVerbose(responseJSON)
 
 			stopIntrim <- true
 			<-stopIntrim
 
-			token = responseJson.AccessToken
+			token = responseJSON.AccessToken
 
 			logIfVerbose("Received new token from API.")
 
 			go func() {
-				time.Sleep(time.Duration(responseJson.ExpiresIn-20) * time.Second)
+				time.Sleep(time.Duration(responseJSON.ExpiresIn-20) * time.Second)
 				refreshTokenChan <- true
 			}()
 
@@ -371,7 +373,7 @@ func tokener() {
 func fromEnv() {
 	getAddressFromEnvOrDefault()
 	getVerboseFromEnvOrDefault()
-	getUrlFromEnvOrDefault()
+	getURLFromEnvOrDefault()
 	getCertFileFromEnvOrDefault()
 	getKeyFileFromEnvOrDefault()
 	getClientKeyFromEnvOrFail()
@@ -407,11 +409,11 @@ func getVerboseFromEnvOrDefault() {
 
 //If the API URL is not set on the command line, get it from the
 //environment or use the default.
-func getUrlFromEnvOrDefault() {
-	if *apiUrl == DefaultUrl {
-		envUrl := os.Getenv(EnvPrefix + "URL")
-		if envUrl != "" {
-			*apiUrl = envUrl
+func getURLFromEnvOrDefault() {
+	if *apiURL == DefaultURL {
+		envURL := os.Getenv(EnvPrefix + "URL")
+		if envURL != "" {
+			*apiURL = envURL
 		}
 	}
 }
