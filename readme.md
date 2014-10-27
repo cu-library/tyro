@@ -18,10 +18,13 @@ These options are optional:
 
     -address= : The address to serve on, passed to ListenAndServe, doc here: http://golang.org/pkg/net/http/#ListenAndServe. Defaults to ":8877". 
     -v : The verbose flag. Prints debugging information.
+    -acaoheader= : The origin to place in the Access-Control-Allow-Origin header. Defaults to *. Is only used for the /status/[bidID] endpoint. Multiple origins can be supplied, delimit with the ; character. Examples: -acaoheader="http://localhost:8000" -acaoheader="http://librarywebsite.com;http://catalogue.library.com" 
+    -certfile= : The location of the Certificate file, for HTTPS.
+    -keyfile= : The location of the Private Key file, for HTTPS.
 
 These flags can also be supplied by environment variables:
 
-    TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL
+    TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_CERT_FILE, TYRO_KEY_FILE, TYRO_ACAO_HEADER
 
 This [Twelve-Factor](http://12factor.net/) style should make it easy to deamonize or Docker-ize this app. 
 
@@ -40,12 +43,13 @@ Tyro provides the following URLs (endpoints?, routes?)
             }
           ]
         } 
-    /raw : A thin wrapper around the raw Sierra API. Tyro will take care of the bearer tokens and X-Forwarded-For header. 
+    /raw : A thin wrapper around the Sierra API. Tyro will take care of the bearer tokens and X-Forwarded-For header. 
     /static[/file] : Serves any files in a directory named 'static' next to the executable. Used mostly for testing and demonstration purposes. Automatically serves an index.html if you visit /static. 
 
-This software is still in alpha, and is more of a test of writing in Go and using the Sierra API. Upcoming features:
+The `/status/[bidID]` endpoint is the only one that will respect the Access-Control-Allow-Origin header. Tyro doesn't allow cross domain access to the raw Sierra API. 
 
-1. CORS support, to let it be used as a public API. 
-2. Cleaning up debugging, better logging.
-3. Tests and CI. 
-4. Things your create an issue for! 
+This software is still in alpha. Upcoming features:
+
+1. Cleaning up debugging, better logging.
+2. Tests and CI. 
+3. Things your create an issue for! 

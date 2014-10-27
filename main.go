@@ -37,11 +37,8 @@ const DefaultAddress string = ":8877"
 //Will we run in verbose mode?
 const DefaultVerbose bool = false
 
-//The default value for the certificate file location
-const DefaultCertFile string = ""
-
-//The default value for the key file location
-const DefaultKeyFile string = ""
+//The default Access-Control-Allow-Origin header (CORS)
+const DefaultACAOHeader string = "*"
 
 //API URL
 const DefaultURL string = "https://sandbox.iii.com/iii/sierra-api/v1/"
@@ -54,10 +51,11 @@ var (
 	address      = flag.String("address", DefaultAddress, "Address for the server to bind on.")
 	verbose      = flag.Bool("v", DefaultVerbose, "Print debugging information.")
 	apiURL       = flag.String("url", DefaultURL, "API url.")
-	certFile     = flag.String("certfile", DefaultCertFile, "Certificate file location.")
-	keyFile      = flag.String("keyfile", DefaultKeyFile, "Private key file location.")
+	certFile     = flag.String("certfile", "", "Certificate file location.")
+	keyFile      = flag.String("keyfile", "", "Private key file location.")
 	clientKey    = flag.String("key", "", "Client Key")
 	clientSecret = flag.String("secret", "", "Client Secret")
+	headerACAO   = flag.String("acaoheader", DefaultACAOHeader, "Access-Control-Allow-Origin Header for CORS. Multiple origins separated by ;")
 
 	templates = template.Must(template.ParseGlob("templates/*.html"))
 
@@ -71,8 +69,9 @@ func main() {
 		fmt.Print("Tyro: A helper for Sierra APIs\n\n")
 		flag.PrintDefaults()
 		fmt.Println("The possible environment variables:")
-		fmt.Println("TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_CERT_FILE, TYRO_KEY_FILE")
+		fmt.Println("TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_CERT_FILE, TYRO_KEY_FILE, TYRO_ACAO_HEADER")
 		fmt.Println("If a certificate file is provided, Tyro will attempt to use HTTPS.")
+		fmt.Println("The Access-Control-Allow-Origin header for CORS is only set for the /status/[bibID] endpoint.")
 	}
 
 	flag.Parse()
@@ -85,7 +84,11 @@ func main() {
 	logIfVerbose("Using Client Secret: " + *clientSecret)
 	logIfVerbose("Connecting to API URL: " + *apiURL)
 
-	if *certFile != DefaultCertFile {
+	if *headerACAO == "*" {
+		fmt.Println("WARNING: USING \"*\" FOR \"Access-Control-Allow-Origin\" HEADER. API WILL BE PUBLIC!")
+	}
+
+	if *certFile != "" {
 		logIfVerbose("Going to try to serve through HTTPS")
 		logIfVerbose("Using Certificate File: " + *certFile)
 		logIfVerbose("Using Private Key File: " + *keyFile)
@@ -103,7 +106,7 @@ func main() {
 	http.Handle("/raw/", rawProxy)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 
-	if *certFile == DefaultCertFile {
+	if *certFile == "" {
 		log.Fatal(http.ListenAndServe(*address, nil))
 	} else {
 		//Remove SSL 3.0 compatibility for POODLE exploit mitigation
@@ -232,6 +235,18 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if *headerACAO == "*" {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	} else if *headerACAO != "" {
+		possibleOrigins := strings.Split(*headerACAO, ";")
+		for _, okOrigin := range possibleOrigins {
+			okOrigin = strings.TrimSpace(okOrigin)
+			if (okOrigin != "") && (okOrigin == r.Header.Get("Origin")) {
+				w.Header().Set("Access-Control-Allow-Origin", okOrigin)
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -378,6 +393,7 @@ func fromEnv() {
 	getKeyFileFromEnvOrDefault()
 	getClientKeyFromEnvOrFail()
 	getClientSecretFromEnvOrFail()
+	getACAOHeaderFromEnvOrDefault()
 }
 
 //If the address is not set on the command line, get it from the
@@ -418,8 +434,10 @@ func getURLFromEnvOrDefault() {
 	}
 }
 
+//If the certification file is not set on the command line, get it
+//from the environment or use the default.
 func getCertFileFromEnvOrDefault() {
-	if *certFile == DefaultCertFile {
+	if *certFile == "" {
 		envCertFile := os.Getenv(EnvPrefix + "CERT_FILE")
 		if envCertFile != "" {
 			*certFile = envCertFile
@@ -427,8 +445,10 @@ func getCertFileFromEnvOrDefault() {
 	}
 }
 
+//If the key file is not set on the command line, get it
+//from the environment or use the default.
 func getKeyFileFromEnvOrDefault() {
-	if *keyFile == DefaultKeyFile {
+	if *keyFile == "" {
 		envKeyFile := os.Getenv(EnvPrefix + "KEY_FILE")
 		if envKeyFile != "" {
 			*keyFile = envKeyFile
@@ -436,6 +456,8 @@ func getKeyFileFromEnvOrDefault() {
 	}
 }
 
+//If the client key is not set on the command line, get it
+//from the environment or exit.
 func getClientKeyFromEnvOrFail() {
 	if *clientKey == "" {
 		envClientKey := os.Getenv(EnvPrefix + "KEY")
@@ -448,6 +470,8 @@ func getClientKeyFromEnvOrFail() {
 	}
 }
 
+//If the client secret is not set on the command line, get it
+//from the environment or exit.
 func getClientSecretFromEnvOrFail() {
 	if *clientSecret == "" {
 		envClientSecret := os.Getenv(EnvPrefix + "SECRET")
@@ -456,6 +480,17 @@ func getClientSecretFromEnvOrFail() {
 		} else {
 			log.Fatalf("Unable to find Client Secret in environment variable %v or provided by flag -secret=",
 				EnvPrefix+"Secret")
+		}
+	}
+}
+
+//If the Access-Control-Allow-Origin header is not set on the command line, get it
+//from the environment or use the default.
+func getACAOHeaderFromEnvOrDefault() {
+	if *headerACAO == DefaultACAOHeader {
+		envHeaderACAO := os.Getenv(EnvPrefix + "ACAO_HEADER")
+		if envHeaderACAO != "" {
+			*headerACAO = envHeaderACAO
 		}
 	}
 }
