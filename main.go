@@ -1,3 +1,13 @@
+// Copyright 2014 Kevin Bowrin All rights reserved.
+// Use of this source code is governed by the MIT 
+// license that can be found in the LICENSE file.
+
+/*
+This package implements a proxy for III's Sierra API.
+It handles authentication and improves access to more commonly used data, 
+like item status. 
+*/
+
 package main
 
 import (
@@ -28,6 +38,7 @@ const DefaultAddress string = ":8877"
 //Will we run in verbose mode?
 const DefaultVerbose bool = false
 
+//Cert
 const DefaultCertFile string = ""
 const DefaultKeyFile string = ""
 
@@ -103,13 +114,6 @@ func main() {
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-
-	token := <-tokenChan
-
-	if token == "uninitialized" {
-		http.Error(w, "Token Error, likely not yet generated.", http.StatusInternalServerError)
-		return
-	}
 
 	renderTemplate(w, "home", nil)
 
@@ -412,6 +416,7 @@ func getUrlFromEnvOrDefault() {
 		}
 	}
 }
+
 
 func getCertFileFromEnvOrDefault() {
     if *certFile == DefaultCertFile {
