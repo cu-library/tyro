@@ -1,13 +1,12 @@
 // Copyright 2014 Kevin Bowrin All rights reserved.
-// Use of this source code is governed by the MIT
+// Use of this source code is governed by the MIT 
 // license that can be found in the LICENSE file.
 
 /*
 This package implements a proxy for III's Sierra API.
-It handles authentication and improves access to more commonly used data,
-like item status.
+It handles authentication and improves access to more commonly used data, 
+like item status. 
 */
-
 package main
 
 import (
@@ -174,12 +173,12 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if resp.StatusCode == 401 {
-		http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
-		logIfVerbose("Internal Server Error at /status/ handler, token is out of date.")
-		refreshTokenChan <- true
-		return
-	}
+    if resp.StatusCode == 401 {
+        http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
+        logIfVerbose("Internal Server Error at /status/ handler, token is out of date.")
+        refreshTokenChan <- true
+        return
+    }
 
 	var responseJson struct {
 		Entries []struct {
@@ -373,10 +372,10 @@ func fromEnv() {
 	getAddressFromEnvOrDefault()
 	getVerboseFromEnvOrDefault()
 	getUrlFromEnvOrDefault()
-	getCertFileFromEnvOrDefault()
-	getKeyFileFromEnvOrDefault()
+    getCertFileFromEnvOrDefault()
+    getKeyFileFromEnvOrDefault()
 	getClientKeyFromEnvOrFail()
-	getClientSecretFromEnvOrFail()
+	getClientSecretFromEnvOrFail()    
 }
 
 //If the address is not set on the command line, get it from the
@@ -417,22 +416,23 @@ func getUrlFromEnvOrDefault() {
 	}
 }
 
+
 func getCertFileFromEnvOrDefault() {
-	if *certFile == DefaultCertFile {
-		envCertFile := os.Getenv(EnvPrefix + "CERT_FILE")
-		if envCertFile != "" {
-			*certFile = envCertFile
-		}
-	}
+    if *certFile == DefaultCertFile {
+        envCertFile := os.Getenv(EnvPrefix + "CERT_FILE")
+        if envCertFile != "" {
+            *certFile = envCertFile
+        }
+    }
 }
 
 func getKeyFileFromEnvOrDefault() {
-	if *keyFile == DefaultKeyFile {
-		envKeyFile := os.Getenv(EnvPrefix + "KEY_FILE")
-		if envKeyFile != "" {
-			*keyFile = envKeyFile
-		}
-	}
+    if *keyFile == DefaultKeyFile {
+        envKeyFile := os.Getenv(EnvPrefix + "KEY_FILE")
+        if envKeyFile != "" {
+            *keyFile = envKeyFile
+        }
+    }
 }
 
 func getClientKeyFromEnvOrFail() {
