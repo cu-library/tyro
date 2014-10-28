@@ -24,9 +24,9 @@ These options are optional:
 
 These flags can also be supplied by environment variables:
 
-    TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_CERT_FILE, TYRO_KEY_FILE, TYRO_ACAO_HEADER
+    TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER
 
-This [Twelve-Factor](http://12factor.net/) style should make it easy to deamonize or Docker-ize this app. 
+This [Twelve-Factor](http://12factor.net/) style should make it easy to deamonize or Docker-ize this app. The TYRO_VERBOSE environment variable, if set, should True or False.
 
 #Usage
 
