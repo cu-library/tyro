@@ -23,7 +23,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -49,7 +48,7 @@ const ItemRequestEndpoint string = "items"
 
 var (
 	address      = flag.String("address", DefaultAddress, "Address for the server to bind on.")
-	verbose      = flag.Bool("v", DefaultVerbose, "Print debugging information.")
+	verbose      = flag.Bool("verbose", DefaultVerbose, "Print debugging information.")
 	apiURL       = flag.String("url", DefaultURL, "API url.")
 	certFile     = flag.String("certfile", "", "Certificate file location.")
 	keyFile      = flag.String("keyfile", "", "Private key file location.")
@@ -69,15 +68,14 @@ func main() {
 		fmt.Print("Tyro: A helper for Sierra APIs\n\n")
 		flag.PrintDefaults()
 		fmt.Println("The possible environment variables:")
-		fmt.Println("TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_CERT_FILE, TYRO_KEY_FILE, TYRO_ACAO_HEADER")
+		fmt.Println("TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER")
 		fmt.Println("If a certificate file is provided, Tyro will attempt to use HTTPS.")
 		fmt.Println("The Access-Control-Allow-Origin header for CORS is only set for the /status/[bibID] endpoint.")
 	}
 
 	flag.Parse()
 
-	//Look at the environment variables.
-	fromEnv()
+	overrideUnsetFlagsFromEnvironmentVariables()
 
 	logIfVerbose("Serving on address: " + *address)
 	logIfVerbose("Using Client Key: " + *clientKey)
@@ -383,114 +381,23 @@ func tokener() {
 	}
 }
 
-//Utility Functions
+func overrideUnsetFlagsFromEnvironmentVariables() {
+	listOfUnsetFlags := make(map[*flag.Flag]bool)
 
-func fromEnv() {
-	getAddressFromEnvOrDefault()
-	getVerboseFromEnvOrDefault()
-	getURLFromEnvOrDefault()
-	getCertFileFromEnvOrDefault()
-	getKeyFileFromEnvOrDefault()
-	getClientKeyFromEnvOrFail()
-	getClientSecretFromEnvOrFail()
-	getACAOHeaderFromEnvOrDefault()
-}
+	//Ugly, but only way to get list of unset flags.
+	flag.VisitAll(func(f *flag.Flag) { listOfUnsetFlags[f] = true })
+	flag.Visit(func(f *flag.Flag) { delete(listOfUnsetFlags, f) })
 
-//If the address is not set on the command line, get it from the
-//environment or use the default.
-func getAddressFromEnvOrDefault() {
-	if *address == DefaultAddress {
-		envAddress := os.Getenv(EnvPrefix + "ADDRESS")
-		if envAddress != "" {
-			*address = envAddress
-		}
-	}
-}
-
-//If verbose boolean is not set on the command line, get it from the
-//environment or use the default.
-func getVerboseFromEnvOrDefault() {
-	if *verbose == DefaultVerbose {
-		envVerboseString := os.Getenv(EnvPrefix + "VERBOSE")
-		if envVerboseString != "" {
-			envVerboseBool, err := strconv.ParseBool(envVerboseString)
+	for k, _ := range listOfUnsetFlags {
+		uppercaseName := strings.ToUpper(k.Name)
+		environmentVariableName := fmt.Sprintf("%v%v", EnvPrefix, uppercaseName)
+		environmentVariableValue := os.Getenv(environmentVariableName)
+		if environmentVariableValue != "" {
+			err := k.Value.Set(environmentVariableValue)
 			if err != nil {
-				log.Fatalf("Unable to parse '%v' (%v) as boolean.", envVerboseString, EnvPrefix+"VERBOSE")
-			} else {
-				*verbose = envVerboseBool
+				log.Fatalf("Unable to set configuration option %v from environment variable %v, which has a value of \"%v\"",
+					k.Name, environmentVariableName, environmentVariableValue)
 			}
-		}
-	}
-}
-
-//If the API URL is not set on the command line, get it from the
-//environment or use the default.
-func getURLFromEnvOrDefault() {
-	if *apiURL == DefaultURL {
-		envURL := os.Getenv(EnvPrefix + "URL")
-		if envURL != "" {
-			*apiURL = envURL
-		}
-	}
-}
-
-//If the certification file is not set on the command line, get it
-//from the environment or use the default.
-func getCertFileFromEnvOrDefault() {
-	if *certFile == "" {
-		envCertFile := os.Getenv(EnvPrefix + "CERT_FILE")
-		if envCertFile != "" {
-			*certFile = envCertFile
-		}
-	}
-}
-
-//If the key file is not set on the command line, get it
-//from the environment or use the default.
-func getKeyFileFromEnvOrDefault() {
-	if *keyFile == "" {
-		envKeyFile := os.Getenv(EnvPrefix + "KEY_FILE")
-		if envKeyFile != "" {
-			*keyFile = envKeyFile
-		}
-	}
-}
-
-//If the client key is not set on the command line, get it
-//from the environment or exit.
-func getClientKeyFromEnvOrFail() {
-	if *clientKey == "" {
-		envClientKey := os.Getenv(EnvPrefix + "KEY")
-		if envClientKey != "" {
-			*clientKey = envClientKey
-		} else {
-			log.Fatalf("Unable to find Client Key in environment variable %v or provided by flag -key=",
-				EnvPrefix+"KEY")
-		}
-	}
-}
-
-//If the client secret is not set on the command line, get it
-//from the environment or exit.
-func getClientSecretFromEnvOrFail() {
-	if *clientSecret == "" {
-		envClientSecret := os.Getenv(EnvPrefix + "SECRET")
-		if envClientSecret != "" {
-			*clientSecret = envClientSecret
-		} else {
-			log.Fatalf("Unable to find Client Secret in environment variable %v or provided by flag -secret=",
-				EnvPrefix+"Secret")
-		}
-	}
-}
-
-//If the Access-Control-Allow-Origin header is not set on the command line, get it
-//from the environment or use the default.
-func getACAOHeaderFromEnvOrDefault() {
-	if *headerACAO == DefaultACAOHeader {
-		envHeaderACAO := os.Getenv(EnvPrefix + "ACAO_HEADER")
-		if envHeaderACAO != "" {
-			*headerACAO = envHeaderACAO
 		}
 	}
 }
