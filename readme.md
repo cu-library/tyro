@@ -21,12 +21,18 @@ These options are optional:
     -acaoheader= : The origin to place in the Access-Control-Allow-Origin header. Defaults to *. Is only used for the /status/[bidID] endpoint. Multiple origins can be supplied, delimit with the ; character. Examples: -acaoheader="http://localhost:8000" -acaoheader="http://librarywebsite.com;http://catalogue.library.com" 
     -certfile= : The location of the Certificate file, for HTTPS.
     -keyfile= : The location of the Private Key file, for HTTPS.
+    -logfile= : Log file. By default, log messages will be printed to Stderr.
+    -logmaxage= : The maximum number of days to retain old log files, in days.
+    -logmaxbackups= : The maximum number of old log files to keep.
+    -logmaxsize= : The maximum size of log files before they are rotated, in megabytes.
 
 These flags can also be supplied by environment variables:
 
-    TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER
+    TYRO_ADDRESS, TYRO_KEY, TYRO_SECRET, TYRO_URL, 
+    TYRO_VERBOSE, TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER, 
+    TYRO_LOGFILE, TYRO_LOGMAXAGE, TYRO_LOGMAXBACKUPS, TYRO_LOGMAXSIZE
 
-This [Twelve-Factor](http://12factor.net/) style should make it easy to deamonize or Docker-ize this app. The TYRO_VERBOSE environment variable, if set, should True or False.
+This [Twelve-Factor](http://12factor.net/) style should make it easy to deamonize or Docker-ize this app. The TYRO_VERBOSE environment variable, if set, should True or False. Log rolling is provided by lumberjack.
 
 #Usage
 
