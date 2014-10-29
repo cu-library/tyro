@@ -49,10 +49,10 @@ const (
 	ItemRequestEndpoint  string = "items"
 
 	//Logging
-	DefaultLogFileLocation     = "Stderr"
-	DefaultLogMaxSize      int = 100
-	DefaultLogMaxBackups   int = 0
-	DefaultLogMaxAge       int = 0
+	DefaultLogFileLocation string = "Stderr"
+	DefaultLogMaxSize      int    = 100
+	DefaultLogMaxBackups   int    = 0
+	DefaultLogMaxAge       int    = 0
 )
 
 var (
