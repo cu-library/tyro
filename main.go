@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"gopkg.in/cudevmaxwell-vendor/lumberjack.v2"
 	"html/template"
 	"log"
 	"net"
@@ -25,7 +26,6 @@ import (
 	"path"
 	"strings"
 	"time"
-
 )
 
 const (
@@ -48,6 +48,11 @@ const (
 	TokenRequestEndpoint string = "token"
 	ItemRequestEndpoint  string = "items"
 
+	//Logging
+	DefaultLogFileLocation     = "Stderr"
+	DefaultLogMaxSize      int = 100
+	DefaultLogMaxBackups   int = 0
+	DefaultLogMaxAge       int = 0
 )
 
 var (
@@ -60,6 +65,11 @@ var (
 	clientSecret = flag.String("secret", "", "Client Secret")
 	headerACAO   = flag.String("acaoheader", DefaultACAOHeader, "Access-Control-Allow-Origin Header for CORS. Multiple origins separated by ;")
 
+	logFileLocation = flag.String("logfile", DefaultLogFileLocation, "Log file. By default, log messages will be printed to STDOUT.")
+	logMaxSize      = flag.Int("logmaxsize", DefaultLogMaxSize, "The maximum size of log files before they are rotated, in megabytes.")
+	logMaxBackups   = flag.Int("logmaxbackups", DefaultLogMaxBackups, "The maximum number of old log files to keep.")
+	logMaxAge       = flag.Int("logmaxage", DefaultLogMaxAge, "The maximum number of days to retain old log files, in days.")
+
 	templates = template.Must(template.ParseGlob("templates/*.html"))
 
 	tokenChan        chan string
@@ -71,16 +81,15 @@ func init() {
 	flag.Usage = func() {
 		fmt.Print("Tyro: A helper for Sierra APIs\n\n")
 		flag.PrintDefaults()
-		fmt.Println("The possible environment variables:")
-		fmt.Println("TYRO_ADDRESS, TYRO_VERBOSE, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER")
+		fmt.Println("  The possible environment variables:")
+
+		flag.VisitAll(func(f *flag.Flag) {
+			uppercaseName := strings.ToUpper(f.Name)
+			fmt.Printf("  %v%v\n", EnvPrefix, uppercaseName)
+		})
+
 		fmt.Println("If a certificate file is provided, Tyro will attempt to use HTTPS.")
 		fmt.Println("The Access-Control-Allow-Origin header for CORS is only set for the /status/[bibID] endpoint.")
-	}
-
-	if *clientKey == "" {
-		log.Fatal("A client key is required to authenticate against the Sierra API.")
-	} else if *clientSecret == "" {
-		log.Fatal("A client secret is required to authenticate against the Sierra API.")
 	}
 
 	tokenChan = make(chan string)
@@ -98,12 +107,30 @@ func init() {
 func main() {
 
 	flag.Parse()
+
 	overrideUnsetFlagsFromEnvironmentVariables()
 
+	if *logFileLocation != "Stderr" {
+		log.SetOutput(&lumberjack.Logger{
+			Filename:   *logFileLocation,
+			MaxSize:    *logMaxSize,
+			MaxBackups: *logMaxBackups,
+			MaxAge:     *logMaxAge,
+		})
+	}
+
+	logIfVerbose("Starting Tyro")
 	logIfVerbose("Serving on address: " + *address)
 	logIfVerbose("Using Client Key: " + *clientKey)
 	logIfVerbose("Using Client Secret: " + *clientSecret)
 	logIfVerbose("Connecting to API URL: " + *apiURL)
+	logIfVerbose("Using ACAO header: " + *headerACAO)
+
+	if *clientKey == "" {
+		log.Fatal("A client key is required to authenticate against the Sierra API.")
+	} else if *clientSecret == "" {
+		log.Fatal("A client secret is required to authenticate against the Sierra API.")
+	}
 
 	if *headerACAO == "*" {
 		fmt.Println("WARNING: USING \"*\" FOR \"Access-Control-Allow-Origin\" HEADER. API WILL BE PUBLIC!")
