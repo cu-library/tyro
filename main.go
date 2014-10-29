@@ -25,26 +25,30 @@ import (
 	"path"
 	"strings"
 	"time"
+
 )
 
-//The prefix for all the curator environment variables
-const EnvPrefix string = "TYRO_"
+const (
+	//The prefix for all the curator environment variables
+	EnvPrefix string = "TYRO_"
 
-//The default address to serve from
-const DefaultAddress string = ":8877"
+	//The default address to serve from
+	DefaultAddress string = ":8877"
 
-//Will we run in verbose mode?
-const DefaultVerbose bool = false
+	//Will we run in verbose mode?
+	DefaultVerbose bool = false
 
-//The default Access-Control-Allow-Origin header (CORS)
-const DefaultACAOHeader string = "*"
+	//The default Access-Control-Allow-Origin header (CORS)
+	DefaultACAOHeader string = "*"
 
-//API URL
-const DefaultURL string = "https://sandbox.iii.com/iii/sierra-api/v1/"
+	//API URL
+	DefaultURL string = "https://sandbox.iii.com/iii/sierra-api/v1/"
 
-//API Endpoints
-const TokenRequestEndpoint string = "token"
-const ItemRequestEndpoint string = "items"
+	//API Endpoints
+	TokenRequestEndpoint string = "token"
+	ItemRequestEndpoint  string = "items"
+
+)
 
 var (
 	address      = flag.String("address", DefaultAddress, "Address for the server to bind on.")
@@ -62,7 +66,7 @@ var (
 	refreshTokenChan chan bool
 )
 
-func main() {
+func init() {
 
 	flag.Usage = func() {
 		fmt.Print("Tyro: A helper for Sierra APIs\n\n")
@@ -73,8 +77,27 @@ func main() {
 		fmt.Println("The Access-Control-Allow-Origin header for CORS is only set for the /status/[bibID] endpoint.")
 	}
 
-	flag.Parse()
+	if *clientKey == "" {
+		log.Fatal("A client key is required to authenticate against the Sierra API.")
+	} else if *clientSecret == "" {
+		log.Fatal("A client secret is required to authenticate against the Sierra API.")
+	}
 
+	tokenChan = make(chan string)
+	refreshTokenChan = make(chan bool)
+
+	http.HandleFunc("/", homeHandler)
+	http.HandleFunc("/status/", statusHandler)
+	rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})
+	rawProxy.Director = rawRewriter
+	http.Handle("/raw/", rawProxy)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
+
+}
+
+func main() {
+
+	flag.Parse()
 	overrideUnsetFlagsFromEnvironmentVariables()
 
 	logIfVerbose("Serving on address: " + *address)
@@ -92,17 +115,8 @@ func main() {
 		logIfVerbose("Using Private Key File: " + *keyFile)
 	}
 
-	tokenChan = make(chan string)
-	refreshTokenChan = make(chan bool)
 	go tokener()
 	refreshTokenChan <- true
-
-	http.HandleFunc("/", homeHandler)
-	http.HandleFunc("/status/", statusHandler)
-	rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})
-	rawProxy.Director = rawRewriter
-	http.Handle("/raw/", rawProxy)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 
 	if *certFile == "" {
 		log.Fatal(http.ListenAndServe(*address, nil))
@@ -258,12 +272,10 @@ func rawRewriter(r *http.Request) {
 
 	if token == "uninitialized" {
 		logIfVerbose("Error at /raw/ handler, token not yet generated.")
-		return
 	}
 
 	if token == "" {
 		logIfVerbose("Error at /raw/ handler, token creation failed.")
-		return
 	}
 
 	parsedAPIURL, err := url.Parse(*apiURL)
@@ -346,6 +358,12 @@ func tokener() {
 				logIfVerbose("Unable to get new token!")
 				logIfVerbose(err)
 				logIfVerbose(resp)
+				return
+			}
+
+			if resp.StatusCode != 200 {
+				token = ""
+				logIfVerbose("Token generation error: Client key, client secret, or API URL might be incorrect.")
 				return
 			}
 
