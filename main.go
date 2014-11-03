@@ -16,7 +16,6 @@ import (
 	"flag"
 	"fmt"
 	"gopkg.in/cudevmaxwell-vendor/lumberjack.v2"
-	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -27,6 +26,8 @@ import (
 	"strings"
 	"time"
 )
+
+type LogLevel int
 
 const (
 	//The prefix for all the curator environment variables
@@ -53,11 +54,32 @@ const (
 	DefaultLogMaxSize      int    = 100
 	DefaultLogMaxBackups   int    = 0
 	DefaultLogMaxAge       int    = 0
+
+	ErrorMessage LogLevel = iota
+	WarnMessage  LogLevel = iota
+	InfoMessage  LogLevel = iota
+	DebugMessage LogLevel = iota
+	TraceMessage LogLevel = iota
 )
+
+func (l LogLevel) String() string {
+	switch l {
+	case ErrorMessage:
+		return "ERROR"
+	case WarnMessage:
+		return "WARN"
+	case InfoMessage:
+		return "INFO"
+	case DebugMessage:
+		return "DEBUG"
+	case TraceMessage:
+		return "TRACE"
+	}
+	return "UNKNOWN"
+}
 
 var (
 	address      = flag.String("address", DefaultAddress, "Address for the server to bind on.")
-	verbose      = flag.Bool("verbose", DefaultVerbose, "Print debugging information.")
 	apiURL       = flag.String("url", DefaultURL, "API url.")
 	certFile     = flag.String("certfile", "", "Certificate file location.")
 	keyFile      = flag.String("keyfile", "", "Private key file location.")
@@ -69,11 +91,12 @@ var (
 	logMaxSize      = flag.Int("logmaxsize", DefaultLogMaxSize, "The maximum size of log files before they are rotated, in megabytes.")
 	logMaxBackups   = flag.Int("logmaxbackups", DefaultLogMaxBackups, "The maximum number of old log files to keep.")
 	logMaxAge       = flag.Int("logmaxage", DefaultLogMaxAge, "The maximum number of days to retain old log files, in days.")
-
-	templates = template.Must(template.ParseGlob("templates/*.html"))
+	logLevel        = flag.String("loglevel", "warn", "The maximum log level which will be logged. error < warn < info < debug < trace. For example, trace will log everything, info will log info, warn, and error.")
 
 	tokenChan        chan string
 	refreshTokenChan chan bool
+
+	LogMessageLevel LogLevel
 )
 
 func init() {
@@ -108,6 +131,8 @@ func main() {
 
 	flag.Parse()
 
+	LogMessageLevel = parseLogLevel()
+
 	overrideUnsetFlagsFromEnvironmentVariables()
 
 	if *logFileLocation != "Stderr" {
@@ -119,46 +144,47 @@ func main() {
 		})
 	}
 
-	logIfVerbose("Starting Tyro")
-	logIfVerbose("Serving on address: " + *address)
-	logIfVerbose("Using Client Key: " + *clientKey)
-	logIfVerbose("Using Client Secret: " + *clientSecret)
-	logIfVerbose("Connecting to API URL: " + *apiURL)
-	logIfVerbose("Using ACAO header: " + *headerACAO)
+	logM("Starting Tyro", InfoMessage)
+	logM("Serving on address: "+*address, InfoMessage)
+	logM("Using Client Key: "+*clientKey, InfoMessage)
+	logM("Using Client Secret: "+*clientSecret, InfoMessage)
+	logM("Connecting to API URL: "+*apiURL, InfoMessage)
+	logM("Using ACAO header: "+*headerACAO, InfoMessage)
 
 	if *clientKey == "" {
-		log.Fatal("A client key is required to authenticate against the Sierra API.")
+		log.Fatal("FATAL: A client key is required to authenticate against the Sierra API.")
 	} else if *clientSecret == "" {
-		log.Fatal("A client secret is required to authenticate against the Sierra API.")
+		log.Fatal("FATAL: A client secret is required to authenticate against the Sierra API.")
 	}
 
 	if *headerACAO == "*" {
-		fmt.Println("WARNING: USING \"*\" FOR \"Access-Control-Allow-Origin\" HEADER. API WILL BE PUBLIC!")
+		logM("Using \"*\" for \"Access-Control-Allow-Origin\" header. API will be public!", WarnMessage)
 	}
 
 	if *certFile != "" {
-		logIfVerbose("Going to try to serve through HTTPS")
-		logIfVerbose("Using Certificate File: " + *certFile)
-		logIfVerbose("Using Private Key File: " + *keyFile)
+		logM("Going to try to serve through HTTPS", InfoMessage)
+		logM("Using Certificate File: "+*certFile, InfoMessage)
+		logM("Using Private Key File: "+*keyFile, InfoMessage)
 	}
 
 	go tokener()
 	refreshTokenChan <- true
 
 	if *certFile == "" {
-		log.Fatal(http.ListenAndServe(*address, nil))
+		log.Fatalf("FATAL: %v", http.ListenAndServe(*address, nil))
 	} else {
 		//Remove SSL 3.0 compatibility for POODLE exploit mitigation
 		config := &tls.Config{MinVersion: tls.VersionTLS10}
 		server := &http.Server{Addr: *address, Handler: nil, TLSConfig: config}
-		log.Fatal(server.ListenAndServeTLS(*certFile, *keyFile))
+		log.Fatalf("FATAL: %v", server.ListenAndServeTLS(*certFile, *keyFile))
 	}
 
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
 
-	renderTemplate(w, "home", nil)
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprint(w, "<html><head></head><body><h1>Welcome to Tyro! The Sierra API helper.</h1></body></html>")
 
 }
 
@@ -168,13 +194,13 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 	if token == "uninitialized" {
 		http.Error(w, "Token Error, token not yet created.", http.StatusInternalServerError)
-		logIfVerbose("Internal Server Error at /status/ handler, token not yet generated.")
+		logM("Internal Server Error at /status/ handler, token not yet generated.", DebugMessage)
 		return
 	}
 
 	if token == "" {
 		http.Error(w, "Token Error, token creation failed.", http.StatusInternalServerError)
-		logIfVerbose("Internal Server Error at /status/ handler, token creation failed.")
+		logM("Internal Server Error at /status/ handler, token creation failed.", WarnMessage)
 		return
 	}
 
@@ -182,14 +208,14 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 	if bibID == "" {
 		http.Error(w, "Error, you need to provide a Bib ID. /status/[BidID]", http.StatusBadRequest)
-		logIfVerbose("Bad Request at /status/ handler, no BidID provided.")
+		logM("Bad Request at /status/ handler, no BidID provided.", TraceMessage)
 		return
 	}
 
 	parsedAPIURL, err := url.Parse(*apiURL)
 	if err != nil {
 		//No recovery possible here, probable problem with URL
-		log.Fatal(err)
+		log.Fatalf("FATAL: %v", err)
 	}
 
 	itemStatusURL := parsedAPIURL
@@ -203,7 +229,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	getItemStatus, err := http.NewRequest("GET", itemStatusURL.String(), nil)
 	if err != nil {
 		//No recovery possible here, probable problem with URL
-		log.Fatal(err)
+		log.Fatalf("FATAL: %v", err)
 	}
 
 	setAuthorizationHeaders(getItemStatus, r, token)
@@ -212,14 +238,13 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := client.Do(getItemStatus)
 	if err != nil {
 		http.Error(w, "Error querying Sierra API", http.StatusInternalServerError)
-		logIfVerbose("Internal Server Error at /status/ handler, GET against itemStatusURL failed.")
-		logIfVerbose(err)
+		logM(fmt.Sprintf("Internal Server Error at /status/ handler, GET against itemStatusURL failed: %v", err), WarnMessage)
 		return
 	}
 
 	if resp.StatusCode == 401 {
 		http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
-		logIfVerbose("Internal Server Error at /status/ handler, token is out of date.")
+		logM("Internal Server Error at /status/ handler, token is out of date:", WarnMessage)
 		refreshTokenChan <- true
 		return
 	}
@@ -240,8 +265,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 	if err != nil {
 		http.Error(w, "JSON Decoding Error", http.StatusInternalServerError)
-		logIfVerbose("Internal Server Error at /status/ handler, JSON Decoding Error")
-		logIfVerbose(err)
+		logM(fmt.Sprintf("Internal Server Error at /status/ handler, JSON Decoding Error: %v", err), WarnMessage)
 		return
 	}
 
@@ -270,9 +294,10 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		statusJSON.Entries = append(statusJSON.Entries, newEntry)
 	}
 
-	json, err := json.MarshalIndent(statusJSON, "", "   ")
+	indentedjson, err := json.MarshalIndent(statusJSON, "", "   ")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "JSON Encoding Error", http.StatusInternalServerError)
+		logM(fmt.Sprintf("Internal Server Error at /status/ handler, JSON Encoding Error: %v", err), WarnMessage)
 		return
 	}
 
@@ -288,8 +313,10 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	logM(fmt.Sprintf("Sending response at /status/ handler: %v", statusJSON), TraceMessage)
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(json)
+	w.Write(indentedjson)
 
 }
 
@@ -298,17 +325,17 @@ func rawRewriter(r *http.Request) {
 	token := <-tokenChan
 
 	if token == "uninitialized" {
-		logIfVerbose("Error at /raw/ handler, token not yet generated.")
+		logM("Error at /raw/ handler, token not yet generated.", DebugMessage)
 	}
 
 	if token == "" {
-		logIfVerbose("Error at /raw/ handler, token creation failed.")
+		logM("Error at /raw/ handler, token creation failed.", WarnMessage)
 	}
 
 	parsedAPIURL, err := url.Parse(*apiURL)
 	if err != nil {
 		//No recovery possible here, probable problem with URL
-		log.Fatal(err)
+		log.Fatalf("FATAL: %v", err)
 	}
 
 	rawRequestURL := parsedAPIURL
@@ -319,8 +346,7 @@ func rawRewriter(r *http.Request) {
 
 	setAuthorizationHeaders(r, r, token)
 
-	logIfVerbose("Sending proxied request:")
-	logIfVerbose(r)
+	logM(fmt.Sprintf("Sending proxied request: %v", r), TraceMessage)
 
 }
 
@@ -338,18 +364,18 @@ func tokener() {
 		select {
 		case <-refreshTokenChan:
 
-			logIfVerbose("Asking for new token...")
+			logM("Asking for new token...", TraceMessage)
 
 			stopIntrim := make(chan bool)
 
 			go func() {
-				logIfVerbose("Serving old token while we wait.")
+				logM("Serving old token while we wait.", TraceMessage)
 				oldToken := token
 			RunForever:
 				for {
 					select {
 					case tokenChan <- oldToken:
-						logIfVerbose("Sent token: " + oldToken)
+						logM("Sent token: "+oldToken, TraceMessage)
 					case <-stopIntrim:
 						close(stopIntrim)
 						break RunForever
@@ -360,7 +386,7 @@ func tokener() {
 			parsedAPIURL, err := url.Parse(*apiURL)
 			if err != nil {
 				//No recovery possible here, probable problem with URL
-				log.Fatal(err)
+				log.Fatalf("FATAL: %v", err)
 			}
 
 			tokenRequestURL := parsedAPIURL
@@ -372,7 +398,7 @@ func tokener() {
 			getTokenRequest, err := http.NewRequest("POST", tokenRequestURL.String(), bytes.NewBufferString(bodyValues.Encode()))
 			if err != nil {
 				//No recovery possible here, probable problem with URL
-				log.Fatal(err)
+				log.Fatalf("FATAL: %v", err)
 			}
 
 			getTokenRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
@@ -382,15 +408,13 @@ func tokener() {
 			resp, err := client.Do(getTokenRequest)
 			if err != nil {
 				token = ""
-				logIfVerbose("Unable to get new token!")
-				logIfVerbose(err)
-				logIfVerbose(resp)
+				logM(fmt.Sprintf("Unable to get new token: %v, %v", err, resp), WarnMessage)
 				return
 			}
 
 			if resp.StatusCode != 200 {
 				token = ""
-				logIfVerbose("Token generation error: Client key, client secret, or API URL might be incorrect.")
+				logM("Token generation error: Client key, client secret, or API URL might be incorrect.", WarnMessage)
 				return
 			}
 
@@ -400,20 +424,18 @@ func tokener() {
 			defer resp.Body.Close()
 			if err != nil {
 				token = ""
-				logIfVerbose("Unable to parse new token response!")
-				logIfVerbose(err)
-				logIfVerbose(resp)
+				logM(fmt.Sprintf("Unable to parse new token response: %v, %v", err, resp), WarnMessage)
 				return
 			}
 
-			logIfVerbose(responseJSON)
+			logM(responseJSON, TraceMessage)
 
 			stopIntrim <- true
 			<-stopIntrim
 
 			token = responseJSON.AccessToken
 
-			logIfVerbose("Received new token from API.")
+			logM("Received new token from API.", TraceMessage)
 
 			go func() {
 				time.Sleep(time.Duration(responseJSON.ExpiresIn-20) * time.Second)
@@ -421,7 +443,7 @@ func tokener() {
 			}()
 
 		case tokenChan <- token:
-			logIfVerbose("Sent token: " + token)
+			logM("Sent token: "+token, TraceMessage)
 		}
 	}
 }
@@ -440,25 +462,17 @@ func overrideUnsetFlagsFromEnvironmentVariables() {
 		if environmentVariableValue != "" {
 			err := k.Value.Set(environmentVariableValue)
 			if err != nil {
-				log.Fatalf("Unable to set configuration option %v from environment variable %v, which has a value of \"%v\"",
+				log.Fatalf("FATAL: Unable to set configuration option %v from environment variable %v, which has a value of \"%v\"",
 					k.Name, environmentVariableName, environmentVariableValue)
 			}
 		}
 	}
 }
 
-//Log a message if the verbose flag is set.
-func logIfVerbose(message interface{}) {
-	if *verbose {
-		log.Println(message)
-	}
-}
-
-//Render an HTML template.
-func renderTemplate(w http.ResponseWriter, tmpl string, data interface{}) {
-	err := templates.ExecuteTemplate(w, tmpl+".html", data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+//Log a message if the level is below the set LogMessageLevel
+func logM(message interface{}, messagelevel LogLevel) {
+	if messagelevel <= LogMessageLevel {
+		log.Printf("%v: %v\n", strings.ToUpper(messagelevel.String()), message)
 	}
 }
 
@@ -475,4 +489,24 @@ func setAuthorizationHeaders(nr *http.Request, or *http.Request, t string) {
 	} else {
 		nr.Header.Add("X-Forwarded-For", originalForwardFor)
 	}
+}
+
+//TODO: The LogLevel type already has a String() function. Use that.
+func parseLogLevel() LogLevel {
+
+	switch *logLevel {
+	case "error":
+		return ErrorMessage
+	case "warn":
+		return WarnMessage
+	case "info":
+		return InfoMessage
+	case "debug":
+		return DebugMessage
+	case "trace":
+		return TraceMessage
+	}
+	fmt.Println("Unable to parse log level")
+	os.Exit(1)
+	return ErrorMessage
 }
