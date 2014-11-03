@@ -59,3 +59,7 @@ This software is still in alpha. Upcoming features:
 1. Cleaning up debugging, better logging.
 2. Tests and CI. 
 3. Things your create an issue for! 
+
+#Contributors
+
+Joe Montibello, https://github.com/joemontibello
