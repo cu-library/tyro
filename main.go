@@ -242,7 +242,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if resp.StatusCode == 401 {
+	if resp.StatusCode == http.StatusUnauthorized {
 		http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
 		logM("Internal Server Error at /status/ handler, token is out of date:", WarnMessage)
 		refreshTokenChan <- true
