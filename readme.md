@@ -29,10 +29,10 @@ These options are optional:
 These flags can also be supplied by environment variables:
 
     TYRO_ADDRESS, TYRO_KEY, TYRO_SECRET, TYRO_URL, 
-    TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER, TYRO_LOGLEVEL
-    TYRO_LOGFILE, TYRO_LOGMAXAGE, TYRO_LOGMAXBACKUPS, TYRO_LOGMAXSIZE
+    TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER, 
+    TYRO_LOGLEVEL, TYRO_LOGFILE, TYRO_LOGMAXAGE, TYRO_LOGMAXBACKUPS, TYRO_LOGMAXSIZE
 
-This [Twelve-Factor](http://12factor.net/) style should make it easy to daemonize or Docker-ize this app. The TYRO_VERBOSE environment variable, if set, should be True or False. Log rolling is provided by [lumberjack](http://github.com/natefinch/lumberjack).
+This [Twelve-Factor](http://12factor.net/) style should make it easy to daemonize or Docker-ize this app. Log rolling is provided by [lumberjack](http://github.com/natefinch/lumberjack).
 
 #Usage
 
@@ -57,7 +57,7 @@ The `/status/[bidID]` endpoint is the only one that will respect the Access-Cont
 This software is still in alpha. Upcoming features:
 
 1. Cleaning up debugging, better logging.
-2. Tests and CI. 
+2. More tests and CI. 
 3. Things your create an issue for! 
 
 #Contributors
