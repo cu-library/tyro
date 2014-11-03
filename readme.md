@@ -4,7 +4,7 @@
 
 ##Setup: 
 
-Tyro is a standalone executable, written in Go. It should compile in Go 1.3. A web server like Nginx or Apache is not requred to use it.
+Tyro is a standalone executable, written in Go. It should compile in Go 1.3. A web server like Nginx or Apache is not required to use it.
 
     ./tyro -key=yourclientkey -secret=yourclientsecret -url=yourapiurl
 
@@ -32,7 +32,7 @@ These flags can also be supplied by environment variables:
     TYRO_VERBOSE, TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER, 
     TYRO_LOGFILE, TYRO_LOGMAXAGE, TYRO_LOGMAXBACKUPS, TYRO_LOGMAXSIZE
 
-This [Twelve-Factor](http://12factor.net/) style should make it easy to deamonize or Docker-ize this app. The TYRO_VERBOSE environment variable, if set, should be True or False. Log rolling is provided by lumberjack.
+This [Twelve-Factor](http://12factor.net/) style should make it easy to daemonize or Docker-ize this app. The TYRO_VERBOSE environment variable, if set, should be True or False. Log rolling is provided by [lumberjack](http://github.com/natefinch/lumberjack).
 
 #Usage
 
