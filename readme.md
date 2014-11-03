@@ -32,7 +32,7 @@ These flags can also be supplied by environment variables:
     TYRO_VERBOSE, TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER, 
     TYRO_LOGFILE, TYRO_LOGMAXAGE, TYRO_LOGMAXBACKUPS, TYRO_LOGMAXSIZE
 
-This [Twelve-Factor](http://12factor.net/) style should make it easy to deamonize or Docker-ize this app. The TYRO_VERBOSE environment variable, if set, should True or False. Log rolling is provided by lumberjack.
+This [Twelve-Factor](http://12factor.net/) style should make it easy to deamonize or Docker-ize this app. The TYRO_VERBOSE environment variable, if set, should be True or False. Log rolling is provided by lumberjack.
 
 #Usage
 
