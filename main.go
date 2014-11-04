@@ -144,7 +144,7 @@ func main() {
 	logM("Using Client Secret: "+*clientSecret, InfoMessage)
 	logM("Connecting to API URL: "+*apiURL, InfoMessage)
 	logM("Using ACAO header: "+*headerACAO, InfoMessage)
-	logM(fmt.Sprintf("Allowing access to raw Sierra API: %v",*raw), InfoMessage)
+	logM(fmt.Sprintf("Allowing access to raw Sierra API: %v", *raw), InfoMessage)
 
 	if *clientKey == "" {
 		log.Fatal("FATAL: A client key is required to authenticate against the Sierra API.")
@@ -164,17 +164,17 @@ func main() {
 
 	go tokener()
 	refreshTokenChan <- true
-    
+
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/status/", statusHandler)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	if *raw {
 		logM("Allowing access to raw Sierra API.", WarnMessage)
-        rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})
-	    rawProxy.Director = rawRewriter
-	    http.Handle("/raw/", rawProxy)
-	}	
-	
+		rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})
+		rawProxy.Director = rawRewriter
+		http.Handle("/raw/", rawProxy)
+	}
+
 	if *certFile == "" {
 		log.Fatalf("FATAL: %v", http.ListenAndServe(*address, nil))
 	} else {
@@ -193,8 +193,8 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprint(w, "<html><head></head><body><pre>404 - Not Found</pre></body></html>")
-        return
-    }
+		return
+	}
 
 	fmt.Fprint(w, "<html><head></head><body><h1>Welcome to Tyro! The Sierra API helper.</h1></body></html>")
 

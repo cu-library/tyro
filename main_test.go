@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
-    "strings"
 )
 
 /*
@@ -27,7 +27,7 @@ func TestHomeHandler(t *testing.T) {
 
 	setupLogging()
 
-	req, err := http.NewRequest("GET", "", nil)
+	req, err := http.NewRequest("GET", "/", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,6 +37,23 @@ func TestHomeHandler(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Home handler didn't return %v", http.StatusOK)
+	}
+}
+
+func TestHomeHandler404(t *testing.T) {
+
+	setupLogging()
+
+	req, err := http.NewRequest("GET", "/badurlnocookie", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	homeHandler(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Home handler didn't return %v for url which should not exist.", http.StatusNotFound)
 	}
 }
 
@@ -186,64 +203,80 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 }
 
 /*
-   ____             __ _                       _   _              
-  / ___|___  _ __  / _(_) __ _ _   _ _ __ __ _| |_(_) ___  _ __   
- | |   / _ \| '_ \| |_| |/ _` | | | | '__/ _` | __| |/ _ \| '_ \  
- | |__| (_) | | | |  _| | (_| | |_| | | | (_| | |_| | (_) | | | | 
-  \____\___/|_| |_|_| |_|\__, |\__,_|_|  \__,_|\__|_|\___/|_| |_| 
-                         |___/             
+  _____     _                ____  _
+ |_   _|__ | | _____ _ __   / ___|| |_ ___  _ __ __ _  __ _  ___
+   | |/ _ \| |/ / _ \ '_ \  \___ \| __/ _ \| '__/ _` |/ _` |/ _ \
+   | | (_) |   <  __/ | | |  ___) | || (_) | | | (_| | (_| |  __/
+   |_|\___/|_|\_\___|_| |_| |____/ \__\___/|_|  \__,_|\__, |\___|
+                                                      |___/
+*/
+
+func TestTokenStorage(t *testing.T) {
+
+	setupLogging()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer ts.Close()
+
+}
+
+/*
+   ____             __ _                       _   _
+  / ___|___  _ __  / _(_) __ _ _   _ _ __ __ _| |_(_) ___  _ __
+ | |   / _ \| '_ \| |_| |/ _` | | | | '__/ _` | __| |/ _ \| '_ \
+ | |__| (_) | | | |  _| | (_| | |_| | | | (_| | |_| | (_) | | | |
+  \____\___/|_| |_|_| |_|\__, |\__,_|_|  \__,_|\__|_|\___/|_| |_|
+                         |___/
 
 */
 
 func TestLogLevelParse(t *testing.T) {
 
-    setupLogging()
+	setupLogging()
 
-    var UnknownBadDumbLogLevel LogLevel = 9999
+	var UnknownBadDumbLogLevel LogLevel = 9999
 
-    //Our expected results, in maps
-    logLevelToString := map[LogLevel]string{
-        ErrorMessage: "error",
-        WarnMessage: "warn",
-        InfoMessage: "info",
-        DebugMessage: "debug",
-        TraceMessage: "trace",
-        UnknownBadDumbLogLevel: "unknown",
-    }
+	//Our expected results, in maps
+	logLevelToString := map[LogLevel]string{
+		ErrorMessage:           "error",
+		WarnMessage:            "warn",
+		InfoMessage:            "info",
+		DebugMessage:           "debug",
+		TraceMessage:           "trace",
+		UnknownBadDumbLogLevel: "unknown",
+	}
 
-    stringToLogLevel := map[string]LogLevel{
-        "error": ErrorMessage,
-        "warn": WarnMessage, 
-        "info": InfoMessage,
-        "debug": DebugMessage,
-        "trace": TraceMessage,
-    }
+	stringToLogLevel := map[string]LogLevel{
+		"error": ErrorMessage,
+		"warn":  WarnMessage,
+		"info":  InfoMessage,
+		"debug": DebugMessage,
+		"trace": TraceMessage,
+	}
 
-    for k, v := range logLevelToString{
+	for k, v := range logLevelToString {
 
-        if strings.ToLower(k.String()) != v{
-            t.Errorf("Unable to parse log level %v properly", k)
-        }
+		if strings.ToLower(k.String()) != v {
+			t.Errorf("Unable to parse log level %v properly", k)
+		}
 
-    }
+	}
 
-    for k, v := range stringToLogLevel{
+	for k, v := range stringToLogLevel {
 
-        if level := parseLogLevel(k); level != v{
-            t.Errorf("Unable to parse log level string %v properly", k)
-        }
+		if level := parseLogLevel(k); level != v {
+			t.Errorf("Unable to parse log level string %v properly", k)
+		}
 
-    }
+	}
 
-    if level := parseLogLevel("blahblahblah"); level != ErrorMessage {
-        t.Error("Default case for string to log level broken.")
-    }
-
-
-
+	if level := parseLogLevel("blahblahblah"); level != TraceMessage {
+		t.Error("Default case for string to log level broken.")
+	}
 
 }
-
 
 /*
   ____       _
