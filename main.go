@@ -36,8 +36,8 @@ const (
 	//The default address to serve from
 	DefaultAddress string = ":8877"
 
-	//Will we run in verbose mode?
-	DefaultVerbose bool = false
+	//Will we allow raw mode access?
+	DefaultRawAccess bool = false
 
 	//The default Access-Control-Allow-Origin header (CORS)
 	DefaultACAOHeader string = "*"
@@ -86,6 +86,7 @@ var (
 	clientKey    = flag.String("key", "", "Client Key")
 	clientSecret = flag.String("secret", "", "Client Secret")
 	headerACAO   = flag.String("acaoheader", DefaultACAOHeader, "Access-Control-Allow-Origin Header for CORS. Multiple origins separated by ;")
+	raw          = flag.Bool("raw", DefaultRawAccess, "Allow access to the raw Sierra API under /raw/")
 
 	logFileLocation = flag.String("logfile", DefaultLogFileLocation, "Log file. By default, log messages will be printed to Sterr.")
 	logMaxSize      = flag.Int("logmaxsize", DefaultLogMaxSize, "The maximum size of log files before they are rotated, in megabytes.")
@@ -118,20 +119,13 @@ func init() {
 	tokenChan = make(chan string)
 	refreshTokenChan = make(chan bool)
 
-	http.HandleFunc("/", homeHandler)
-	http.HandleFunc("/status/", statusHandler)
-	rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})
-	rawProxy.Director = rawRewriter
-	http.Handle("/raw/", rawProxy)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
-
 }
 
 func main() {
 
 	flag.Parse()
 
-	LogMessageLevel = parseLogLevel()
+	LogMessageLevel = parseLogLevel(*logLevel)
 
 	overrideUnsetFlagsFromEnvironmentVariables()
 
@@ -150,6 +144,7 @@ func main() {
 	logM("Using Client Secret: "+*clientSecret, InfoMessage)
 	logM("Connecting to API URL: "+*apiURL, InfoMessage)
 	logM("Using ACAO header: "+*headerACAO, InfoMessage)
+	logM(fmt.Sprintf("Allowing access to raw Sierra API: %v",*raw), InfoMessage)
 
 	if *clientKey == "" {
 		log.Fatal("FATAL: A client key is required to authenticate against the Sierra API.")
@@ -169,7 +164,17 @@ func main() {
 
 	go tokener()
 	refreshTokenChan <- true
-
+    
+	http.HandleFunc("/", homeHandler)
+	http.HandleFunc("/status/", statusHandler)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
+	if *raw {
+		logM("Allowing access to raw Sierra API.", WarnMessage)
+        rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})
+	    rawProxy.Director = rawRewriter
+	    http.Handle("/raw/", rawProxy)
+	}	
+	
 	if *certFile == "" {
 		log.Fatalf("FATAL: %v", http.ListenAndServe(*address, nil))
 	} else {
@@ -184,6 +189,13 @@ func main() {
 func homeHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
+
+	if r.URL.Path != "/" {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, "<html><head></head><body><pre>404 - Not Found</pre></body></html>")
+        return
+    }
+
 	fmt.Fprint(w, "<html><head></head><body><h1>Welcome to Tyro! The Sierra API helper.</h1></body></html>")
 
 }
@@ -492,9 +504,9 @@ func setAuthorizationHeaders(nr *http.Request, or *http.Request, t string) {
 }
 
 //TODO: The LogLevel type already has a String() function. Use that.
-func parseLogLevel() LogLevel {
+func parseLogLevel(logLevel string) LogLevel {
 
-	switch *logLevel {
+	switch logLevel {
 	case "error":
 		return ErrorMessage
 	case "warn":
@@ -506,7 +518,5 @@ func parseLogLevel() LogLevel {
 	case "trace":
 		return TraceMessage
 	}
-	fmt.Println("Unable to parse log level")
-	os.Exit(1)
-	return ErrorMessage
+	return TraceMessage
 }

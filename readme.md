@@ -17,6 +17,7 @@ Tyro requires the following command line options:
 These options are optional: 
 
     -address= : The address to serve on, passed to ListenAndServe, doc here: http://golang.org/pkg/net/http/#ListenAndServe. Defaults to ":8877". 
+    -raw : If supplied, this flag will turn on access to the raw Sierra API under /raw/. 
     -acaoheader= : The origin to place in the Access-Control-Allow-Origin header. Defaults to *. Is only used for the /status/[bidID] endpoint. Multiple origins can be supplied, delimit with the ; character. Examples: -acaoheader="http://localhost:8000" -acaoheader="http://librarywebsite.com;http://catalogue.library.com" 
     -certfile= : The location of the Certificate file, for HTTPS.
     -keyfile= : The location of the Private Key file, for HTTPS.
@@ -28,11 +29,13 @@ These options are optional:
 
 These flags can also be supplied by environment variables:
 
-    TYRO_ADDRESS, TYRO_KEY, TYRO_SECRET, TYRO_URL, 
+    TYRO_ADDRESS, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_RAW
     TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER, 
     TYRO_LOGLEVEL, TYRO_LOGFILE, TYRO_LOGMAXAGE, TYRO_LOGMAXBACKUPS, TYRO_LOGMAXSIZE
 
-This [Twelve-Factor](http://12factor.net/) style should make it easy to daemonize or Docker-ize this app. Log rolling is provided by [lumberjack](http://github.com/natefinch/lumberjack).
+This [Twelve-Factor](http://12factor.net/) style should make it easy to daemonize or Docker-ize this app. 
+The TYRO_RAW environment variable, if set, should be True or False.
+Log rolling is provided by [lumberjack](http://github.com/natefinch/lumberjack).
 
 #Usage
 
@@ -54,11 +57,7 @@ Tyro provides the following URLs (endpoints?, routes?)
 
 The `/status/[bidID]` endpoint is the only one that will respect the Access-Control-Allow-Origin header. Tyro doesn't allow cross domain access to the raw Sierra API. 
 
-This software is still in alpha. Upcoming features:
-
-1. Cleaning up debugging, better logging.
-2. More tests and CI. 
-3. Things your create an issue for! 
+This software is now in beta. Please create issues for bugs or feature requests. 
 
 #Contributors
 
