@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+    "strings"
 )
 
 /*
@@ -183,6 +184,66 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 	}
 
 }
+
+/*
+   ____             __ _                       _   _              
+  / ___|___  _ __  / _(_) __ _ _   _ _ __ __ _| |_(_) ___  _ __   
+ | |   / _ \| '_ \| |_| |/ _` | | | | '__/ _` | __| |/ _ \| '_ \  
+ | |__| (_) | | | |  _| | (_| | |_| | | | (_| | |_| | (_) | | | | 
+  \____\___/|_| |_|_| |_|\__, |\__,_|_|  \__,_|\__|_|\___/|_| |_| 
+                         |___/             
+
+*/
+
+func TestLogLevelParse(t *testing.T) {
+
+    setupLogging()
+
+    var UnknownBadDumbLogLevel LogLevel = 9999
+
+    //Our expected results, in maps
+    logLevelToString := map[LogLevel]string{
+        ErrorMessage: "error",
+        WarnMessage: "warn",
+        InfoMessage: "info",
+        DebugMessage: "debug",
+        TraceMessage: "trace",
+        UnknownBadDumbLogLevel: "unknown",
+    }
+
+    stringToLogLevel := map[string]LogLevel{
+        "error": ErrorMessage,
+        "warn": WarnMessage, 
+        "info": InfoMessage,
+        "debug": DebugMessage,
+        "trace": TraceMessage,
+    }
+
+    for k, v := range logLevelToString{
+
+        if strings.ToLower(k.String()) != v{
+            t.Errorf("Unable to parse log level %v properly", k)
+        }
+
+    }
+
+    for k, v := range stringToLogLevel{
+
+        if level := parseLogLevel(k); level != v{
+            t.Errorf("Unable to parse log level string %v properly", k)
+        }
+
+    }
+
+    if level := parseLogLevel("blahblahblah"); level != ErrorMessage {
+        t.Error("Default case for string to log level broken.")
+    }
+
+
+
+
+}
+
 
 /*
   ____       _
