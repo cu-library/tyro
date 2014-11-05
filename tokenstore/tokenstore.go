@@ -44,7 +44,7 @@ type TokenStore struct {
 	Value       string
 	Refresh     chan struct{}
 	LogMessages chan LogMessage
-	Initialized  chan struct{}
+	Initialized chan struct{}
 }
 
 func NewTokenStore() *TokenStore {
