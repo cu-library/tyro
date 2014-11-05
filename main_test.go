@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+    "time"
 )
 
 /*
@@ -75,7 +76,7 @@ func TestStatusHandlerErrorUninitialized(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() {
-		tokenChan <- "uninitialized"
+		tokenChan <- UninitializedToken
 	}()
 
 	w := httptest.NewRecorder()
@@ -99,7 +100,7 @@ func TestStatusHandlerErrorTokenEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() {
-		tokenChan <- ""
+		tokenChan <- ErrorToken
 	}()
 
 	w := httptest.NewRecorder()
@@ -213,13 +214,45 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 
 func TestTokenStorage(t *testing.T) {
 
-	setupLogging()
+	setupLogging()  
+
+    newServerRan := false
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        newServerRan = true
 		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
 	}))
 	defer ts.Close()
 
+    oldAPIURL := *apiURL
+    *apiURL = ts.URL
+    defer func() { *apiURL = oldAPIURL }()
+
+    defer func() {  
+        tokenChan = make(chan string)
+        refreshTokenChan = make(chan bool)
+    }()
+
+    go tokener()
+    refreshTokenChan <- true
+
+    for {
+        if newServerRan == false{
+            if token := <-tokenChan; token != UninitializedToken{
+                t.Log(token)
+                close(refreshTokenChan)
+                t.Error("Token Storage not returning uninitialized token value before getting token from sierra api.")
+            }
+        } else {
+            time.Sleep(5 * time.Second)
+            if token := <-tokenChan; token != "test"{
+                t.Log(token)
+                close(refreshTokenChan)
+                t.Error("Token Storage not returning the correct token value after getting token from sierra api.")
+            }
+            break 
+        }
+    }
 }
 
 /*

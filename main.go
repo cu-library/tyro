@@ -25,6 +25,7 @@ import (
 	"path"
 	"strings"
 	"time"
+    "sync"
 )
 
 type LogLevel int
@@ -60,6 +61,9 @@ const (
 	InfoMessage  LogLevel = iota
 	DebugMessage LogLevel = iota
 	TraceMessage LogLevel = iota
+
+    UninitializedToken string = "uninitialized"
+    ErrorToken string = ""
 )
 
 func (l LogLevel) String() string {
@@ -204,13 +208,13 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 	token := <-tokenChan
 
-	if token == "uninitialized" {
+	if token == UninitializedToken {
 		http.Error(w, "Token Error, token not yet created.", http.StatusInternalServerError)
 		logM("Internal Server Error at /status/ handler, token not yet generated.", DebugMessage)
 		return
 	}
 
-	if token == "" {
+	if token == ErrorToken {
 		http.Error(w, "Token Error, token creation failed.", http.StatusInternalServerError)
 		logM("Internal Server Error at /status/ handler, token creation failed.", WarnMessage)
 		return
@@ -336,11 +340,11 @@ func rawRewriter(r *http.Request) {
 
 	token := <-tokenChan
 
-	if token == "uninitialized" {
+	if token == UninitializedToken {
 		logM("Error at /raw/ handler, token not yet generated.", DebugMessage)
 	}
 
-	if token == "" {
+	if token == ErrorToken {
 		logM("Error at /raw/ handler, token creation failed.", WarnMessage)
 	}
 
@@ -362,6 +366,7 @@ func rawRewriter(r *http.Request) {
 
 }
 
+//To stop, close refreshTokenChan
 func tokener() {
 
 	type AuthTokenResponse struct {
@@ -370,94 +375,112 @@ func tokener() {
 		ExpiresIn   int    `json:"expires_in"`
 	}
 
-	token := "uninitialized"
+	token := UninitializedToken
 
-	for {
-		select {
-		case <-refreshTokenChan:
+    mutex := new(sync.Mutex)
+    wg := new(sync.WaitGroup)
 
-			logM("Asking for new token...", TraceMessage)
+    wg.Add(1)
+    go func() {           
+        for _ = range refreshTokenChan {
 
-			stopIntrim := make(chan bool)
+            parsedAPIURL, err := url.Parse(*apiURL)
+            if err != nil {
+                //No recovery possible here, probable problem with URL
+                log.Fatalf("FATAL: %v", err)
+            }
 
-			go func() {
-				logM("Serving old token while we wait.", TraceMessage)
-				oldToken := token
-			RunForever:
-				for {
-					select {
-					case tokenChan <- oldToken:
-						logM("Sent token: "+oldToken, TraceMessage)
-					case <-stopIntrim:
-						close(stopIntrim)
-						break RunForever
-					}
-				}
-			}()
+            tokenRequestURL := parsedAPIURL
+            tokenRequestURL.Path = path.Join(tokenRequestURL.Path, TokenRequestEndpoint)
 
-			parsedAPIURL, err := url.Parse(*apiURL)
-			if err != nil {
-				//No recovery possible here, probable problem with URL
-				log.Fatalf("FATAL: %v", err)
-			}
+            bodyValues := url.Values{}
+            bodyValues.Set("grant_type", "client_credentials")
 
-			tokenRequestURL := parsedAPIURL
-			tokenRequestURL.Path = path.Join(tokenRequestURL.Path, TokenRequestEndpoint)
+            getTokenRequest, err := http.NewRequest("POST", tokenRequestURL.String(), bytes.NewBufferString(bodyValues.Encode()))
+            if err != nil {
+                //No recovery possible here, probable problem with URL
+                log.Fatalf("FATAL: %v", err)
+            }
 
-			bodyValues := url.Values{}
-			bodyValues.Set("grant_type", "client_credentials")
+            getTokenRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+            getTokenRequest.SetBasicAuth(*clientKey, *clientSecret)
 
-			getTokenRequest, err := http.NewRequest("POST", tokenRequestURL.String(), bytes.NewBufferString(bodyValues.Encode()))
-			if err != nil {
-				//No recovery possible here, probable problem with URL
-				log.Fatalf("FATAL: %v", err)
-			}
+            client := &http.Client{}
+            resp, err := client.Do(getTokenRequest)
+            if err != nil {
+                mutex.Lock()
+                token = ErrorToken
+                mutex.Unlock()
+                logM(fmt.Sprintf("Unable to get new token: %v, %v", err, resp), WarnMessage)
+                continue
+            }
 
-			getTokenRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-			getTokenRequest.SetBasicAuth(*clientKey, *clientSecret)
+            if resp.StatusCode != 200 {
+                mutex.Lock()
+                token = ErrorToken
+                mutex.Unlock()
+                logM("Token generation error: Client key, client secret, or API URL might be incorrect.", WarnMessage)
+                continue
+            }
 
-			client := &http.Client{}
-			resp, err := client.Do(getTokenRequest)
-			if err != nil {
-				token = ""
-				logM(fmt.Sprintf("Unable to get new token: %v, %v", err, resp), WarnMessage)
-				return
-			}
+            var responseJSON AuthTokenResponse
 
-			if resp.StatusCode != 200 {
-				token = ""
-				logM("Token generation error: Client key, client secret, or API URL might be incorrect.", WarnMessage)
-				return
-			}
+            err = json.NewDecoder(resp.Body).Decode(&responseJSON)
+            defer resp.Body.Close()
+            if err != nil {
+                mutex.Lock()
+                token = ErrorToken
+                mutex.Unlock()
+                logM(fmt.Sprintf("Unable to parse new token response: %v, %v", err, resp), WarnMessage)
+                continue
+            }
 
-			var responseJSON AuthTokenResponse
+            logM(responseJSON, TraceMessage)
 
-			err = json.NewDecoder(resp.Body).Decode(&responseJSON)
-			defer resp.Body.Close()
-			if err != nil {
-				token = ""
-				logM(fmt.Sprintf("Unable to parse new token response: %v, %v", err, resp), WarnMessage)
-				return
-			}
+            mutex.Lock()
+            token = responseJSON.AccessToken
+            mutex.Unlock()
 
-			logM(responseJSON, TraceMessage)
+            logM("Received new token from API.", TraceMessage)
 
-			stopIntrim <- true
-			<-stopIntrim
+            //Ensure the old token value is cleared from the tokenChan
+            <-tokenChan
+            
+            wg.Add(1)
+            go func() {                
+                time.Sleep(time.Duration(responseJSON.ExpiresIn-20) * time.Second)
+                refreshTokenChan <- true
+                wg.Done()
+            }()
+        }
 
-			token = responseJSON.AccessToken
+        wg.Done()
+    }()
 
-			logM("Received new token from API.", TraceMessage)
+    stopSending := make(chan bool)
 
-			go func() {
-				time.Sleep(time.Duration(responseJSON.ExpiresIn-20) * time.Second)
-				refreshTokenChan <- true
-			}()
+    getToken := func() string {
+        mutex.Lock()
+        defer mutex.Unlock()
+        return token      
+    }
 
-		case tokenChan <- token:
-			logM("Sent token: "+token, TraceMessage)
-		}
-	}
+    go func(){
+        SendForever:
+        for {           
+            select {
+            case <-stopSending:
+                break SendForever
+            case tokenChan <- getToken():
+                logM("Sent token: "+token, TraceMessage)
+            }            
+        }
+    }()
+
+    wg.Wait()
+    stopSending<-true    
+    logM("Tokener shut down", TraceMessage)
+
 }
 
 func overrideUnsetFlagsFromEnvironmentVariables() {
