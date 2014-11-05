@@ -51,7 +51,7 @@ func NewTokenStore() *TokenStore {
 	t := new(TokenStore)
 	t.Refresh = make(chan struct{})
 	t.LogMessages = make(chan LogMessage, 100)
-	t.Initialized = make(chan struct{})
+	t.Initialized = make(chan struct{}, 1)
 	t.Value = UninitialedTokenValue
 
 	return t
@@ -75,7 +75,7 @@ func (t *TokenStore) set(nt string) {
 	t.Value = nt
 }
 
-//This is the function which will run forever, waiting for a timeout
+//This function runs forever, waiting for a timeout
 //or a message on the Refresh channel. It will exit if the Refresh
 //channel is closed.
 func (t *TokenStore) Refresher(tokenURL *url.URL, clientKey, clientSecret *string) {
@@ -128,8 +128,6 @@ func (t *TokenStore) refresh(tokenURL *url.URL, clientKey, clientSecret *string)
 		TokenType   string `json:"token_type"`
 		ExpiresIn   int    `json:"expires_in"`
 	}
-
-	time.Sleep(10 * time.Second)
 
 	bodyValues := url.Values{}
 	bodyValues.Set("grant_type", "client_credentials")

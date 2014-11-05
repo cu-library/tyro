@@ -194,6 +194,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		logM("Waiting for token to initialize...", loglevel.TraceMessage)
 		select {
 		case <-tokenStore.Initialized:
+			tokenStore.Initialized <- struct{}{}
 			token, err = tokenStore.Get()
 			if err != nil {
 				http.Error(w, "Token Error.", http.StatusInternalServerError)

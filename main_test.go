@@ -6,13 +6,14 @@ package main
 
 import (
 	"fmt"
+	"github.com/cudevmaxwell/tyro/loglevel"
+	"github.com/cudevmaxwell/tyro/tokenstore"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
-	"strings"
 	"testing"
-	"time"
 )
 
 /*
@@ -67,65 +68,20 @@ func TestHomeHandler404(t *testing.T) {
 
 */
 
-func TestStatusHandlerErrorUninitialized(t *testing.T) {
-
-	setupLogging()
-
-	req, err := http.NewRequest("GET", "/status/123", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	go func() {
-		tokenChan <- UninitializedToken
-	}()
-
-	w := httptest.NewRecorder()
-	statusHandler(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("Status handler didn't error %v when token == uninitialized", http.StatusInternalServerError)
-	}
-
-	if w.Body.String() != "Token Error, token not yet created.\n" {
-		t.Error("Status handler didn't return the correct information when token == uninitialized")
-	}
-}
-
-func TestStatusHandlerErrorTokenEmpty(t *testing.T) {
-
-	setupLogging()
-
-	req, err := http.NewRequest("GET", "/status/123", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	go func() {
-		tokenChan <- ErrorToken
-	}()
-
-	w := httptest.NewRecorder()
-	statusHandler(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("Status handler didn't error %v when token == \"\"", http.StatusInternalServerError)
-	}
-
-	if w.Body.String() != "Token Error, token creation failed.\n" {
-		t.Error("Status handler didn't return the correct information when token == \"\" ")
-	}
-}
-
 func TestStatusHandlerNoBibId(t *testing.T) {
 
 	setupLogging()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer ts.Close()
+
+	setupTokenStorage(ts.URL)
 
 	req, err := http.NewRequest("GET", "/status/", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() {
-		tokenChan <- "token"
-	}()
 
 	w := httptest.NewRecorder()
 	statusHandler(w, req)
@@ -143,24 +99,26 @@ func TestStatusHandlerNoBibId(t *testing.T) {
 func TestStatusHandlerGoodResponseFromSierra(t *testing.T) {
 
 	setupLogging()
-
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, `{"entries":[{"id":2536252,"updatedDate":"2014-09-19T03:09:16Z","createdDate":"2007-05-11T18:37:00Z","deleted":false,"bibIds":[2401597],"location":{"code":"flr4 ","name":"Floor 4 Books"},"status":{"code":"-","display":"IN LIBRARY"},"barcode":"12016135026","callNumber":"|aJC578.R383|bG67 2007"}]}`)
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
 	}))
 	defer ts.Close()
+	setupTokenStorage(ts.URL)
+
+	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"entries":[{"id":2536252,"updatedDate":"2014-09-19T03:09:16Z","createdDate":"2007-05-11T18:37:00Z","deleted":false,"bibIds":[2401597],"location":{"code":"flr4 ","name":"Floor 4 Books"},"status":{"code":"-","display":"IN LIBRARY"},"barcode":"12016135026","callNumber":"|aJC578.R383|bG67 2007"}]}`)
+	}))
+	defer ts2.Close()
 
 	//Get StatusHandler to look at our mocked server
 	oldAPIURL := *apiURL
-	*apiURL = ts.URL
+	*apiURL = ts2.URL
 	defer func() { *apiURL = oldAPIURL }()
 
 	req, err := http.NewRequest("GET", "/status/2401597", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() {
-		tokenChan <- "token"
-	}()
 
 	w := httptest.NewRecorder()
 	statusHandler(w, req)
@@ -182,14 +140,16 @@ func TestStatusHandlerGoodResponseFromSierra(t *testing.T) {
 func TestRawHandlerTestRewrite(t *testing.T) {
 
 	setupLogging()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer ts.Close()
+	setupTokenStorage(ts.URL)
 
 	req, err := http.NewRequest("GET", "/raw/?bibIds=1234", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() {
-		tokenChan <- "token"
-	}()
 
 	oldAPIURL := *apiURL
 	*apiURL = "http://apiurl.com/test/"
@@ -212,7 +172,23 @@ func TestRawHandlerTestRewrite(t *testing.T) {
                       |_|
 */
 
+func setupTokenStorage(fakeurl string) {
+
+	exampleString := "dingding"
+	clientKey := &exampleString
+	clientSecret := &exampleString
+
+	tokenStore = tokenstore.NewTokenStore()
+	u, _ := url.Parse(fakeurl)
+	tokenStore.Refresher(u, clientKey, clientSecret)
+	go func() {
+		for _ = range tokenStore.LogMessages {
+		}
+	}()
+
+}
+
 func setupLogging() {
-	LogMessageLevel = ErrorMessage
+	LogMessageLevel = loglevel.ErrorMessage
 	log.SetOutput(os.Stderr)
 }

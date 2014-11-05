@@ -5,6 +5,10 @@
 package tokenstore
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -39,4 +43,37 @@ func TestTokenSetAndGet(t *testing.T) {
 	if err == nil {
 		t.Error("Token Get() should have returned an error after set to empty string.")
 	}
+}
+
+func TestTokenRefresh(t *testing.T) {
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer ts.Close()
+
+	exampleString := "dingding"
+	clientKey := &exampleString
+	clientSecret := &exampleString
+
+	tok := NewTokenStore()
+
+	u, _ := url.Parse(ts.URL)
+
+	refresh, err := tok.refresh(u, clientKey, clientSecret)
+	if err != nil {
+		t.Error("Token refresh() should have worked.")
+	}
+	if refresh != 3600 {
+		t.Error("Token refresh() didn't return the right timeout.")
+	}
+
+	tokenVal, err := tok.Get()
+	if err != nil {
+		t.Error("Token Get() should not have returned an error.")
+	}
+	if tokenVal != "test" {
+		t.Error("Token refresh() didn't return the right value.")
+	}
+
 }
