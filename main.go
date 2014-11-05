@@ -10,11 +10,13 @@ like item status.
 package main
 
 import (
-	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"github.com/cudevmaxwell/tyro/loglevel"
+	"github.com/cudevmaxwell/tyro/tokenstore"
 	"gopkg.in/cudevmaxwell-vendor/lumberjack.v2"
 	"log"
 	"net"
@@ -24,11 +26,8 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 	"time"
 )
-
-type LogLevel int
 
 const (
 	//The prefix for all the curator environment variables
@@ -55,32 +54,7 @@ const (
 	DefaultLogMaxSize      int    = 100
 	DefaultLogMaxBackups   int    = 0
 	DefaultLogMaxAge       int    = 0
-
-	ErrorMessage LogLevel = iota
-	WarnMessage  LogLevel = iota
-	InfoMessage  LogLevel = iota
-	DebugMessage LogLevel = iota
-	TraceMessage LogLevel = iota
-
-	UninitializedToken string = "uninitialized"
-	ErrorToken         string = ""
 )
-
-func (l LogLevel) String() string {
-	switch l {
-	case ErrorMessage:
-		return "ERROR"
-	case WarnMessage:
-		return "WARN"
-	case InfoMessage:
-		return "INFO"
-	case DebugMessage:
-		return "DEBUG"
-	case TraceMessage:
-		return "TRACE"
-	}
-	return "UNKNOWN"
-}
 
 var (
 	address      = flag.String("address", DefaultAddress, "Address for the server to bind on.")
@@ -98,10 +72,9 @@ var (
 	logMaxAge       = flag.Int("logmaxage", DefaultLogMaxAge, "The maximum number of days to retain old log files, in days.")
 	logLevel        = flag.String("loglevel", "warn", "The maximum log level which will be logged. error < warn < info < debug < trace. For example, trace will log everything, info will log info, warn, and error.")
 
-	tokenChan        chan string
-	refreshTokenChan chan bool
+	tokenStore = tokenstore.NewTokenStore()
 
-	LogMessageLevel LogLevel
+	LogMessageLevel loglevel.LogLevel
 )
 
 func init() {
@@ -119,17 +92,13 @@ func init() {
 		fmt.Println("If a certificate file is provided, Tyro will attempt to use HTTPS.")
 		fmt.Println("The Access-Control-Allow-Origin header for CORS is only set for the /status/[bibID] endpoint.")
 	}
-
-	tokenChan = make(chan string)
-	refreshTokenChan = make(chan bool)
-
 }
 
 func main() {
 
 	flag.Parse()
 
-	LogMessageLevel = parseLogLevel(*logLevel)
+	LogMessageLevel = loglevel.ParseLogLevel(*logLevel)
 
 	overrideUnsetFlagsFromEnvironmentVariables()
 
@@ -142,13 +111,13 @@ func main() {
 		})
 	}
 
-	logM("Starting Tyro", InfoMessage)
-	logM("Serving on address: "+*address, InfoMessage)
-	logM("Using Client Key: "+*clientKey, InfoMessage)
-	logM("Using Client Secret: "+*clientSecret, InfoMessage)
-	logM("Connecting to API URL: "+*apiURL, InfoMessage)
-	logM("Using ACAO header: "+*headerACAO, InfoMessage)
-	logM(fmt.Sprintf("Allowing access to raw Sierra API: %v", *raw), InfoMessage)
+	logM("Starting Tyro", loglevel.InfoMessage)
+	logM("Serving on address: "+*address, loglevel.InfoMessage)
+	logM("Using Client Key: "+*clientKey, loglevel.InfoMessage)
+	logM("Using Client Secret: "+*clientSecret, loglevel.InfoMessage)
+	logM("Connecting to API URL: "+*apiURL, loglevel.InfoMessage)
+	logM("Using ACAO header: "+*headerACAO, loglevel.InfoMessage)
+	logM(fmt.Sprintf("Allowing access to raw Sierra API: %v", *raw), loglevel.InfoMessage)
 
 	if *clientKey == "" {
 		log.Fatal("FATAL: A client key is required to authenticate against the Sierra API.")
@@ -157,23 +126,32 @@ func main() {
 	}
 
 	if *headerACAO == "*" {
-		logM("Using \"*\" for \"Access-Control-Allow-Origin\" header. API will be public!", WarnMessage)
+		logM("Using \"*\" for \"Access-Control-Allow-Origin\" header. API will be public!", loglevel.WarnMessage)
 	}
 
 	if *certFile != "" {
-		logM("Going to try to serve through HTTPS", InfoMessage)
-		logM("Using Certificate File: "+*certFile, InfoMessage)
-		logM("Using Private Key File: "+*keyFile, InfoMessage)
+		logM("Going to try to serve through HTTPS", loglevel.InfoMessage)
+		logM("Using Certificate File: "+*certFile, loglevel.InfoMessage)
+		logM("Using Private Key File: "+*keyFile, loglevel.InfoMessage)
 	}
 
-	go tokener()
-	refreshTokenChan <- true
+	parsedURL, err := parseURLandEndpoint(*apiURL, TokenRequestEndpoint)
+	if err != nil {
+		log.Fatal("FATAL: Unable to parse API URL.")
+	}
+
+	go func() {
+		for m := range tokenStore.LogMessages {
+			logM(m.Message, m.Level)
+		}
+	}()
+	tokenStore.Refresher(parsedURL, clientKey, clientSecret)
 
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/status/", statusHandler)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	if *raw {
-		logM("Allowing access to raw Sierra API.", WarnMessage)
+		logM("Allowing access to raw Sierra API.", loglevel.WarnMessage)
 		rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})
 		rawProxy.Director = rawRewriter
 		http.Handle("/raw/", rawProxy)
@@ -206,46 +184,54 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
 
-	token := <-tokenChan
-
-	if token == UninitializedToken {
-		http.Error(w, "Token Error, token not yet created.", http.StatusInternalServerError)
-		logM("Internal Server Error at /status/ handler, token not yet generated.", DebugMessage)
+	token, err := tokenStore.Get()
+	if err != nil {
+		http.Error(w, "Token Error.", http.StatusInternalServerError)
+		logM("Internal Server Error at /status/ handler, token error.", loglevel.DebugMessage)
 		return
 	}
-
-	if token == ErrorToken {
-		http.Error(w, "Token Error, token creation failed.", http.StatusInternalServerError)
-		logM("Internal Server Error at /status/ handler, token creation failed.", WarnMessage)
-		return
+	if token == tokenstore.UninitialedTokenValue {
+		logM("Waiting for token to initialize...", loglevel.TraceMessage)
+		select {
+		case <-tokenStore.Initialized:
+			token, err = tokenStore.Get()
+			if err != nil {
+				http.Error(w, "Token Error.", http.StatusInternalServerError)
+				logM("Internal Server Error at /status/ handler, token error.", loglevel.DebugMessage)
+				return
+			}
+		case <-time.After(time.Second * 30):
+			http.Error(w, "Token Error.", http.StatusInternalServerError)
+			logM("Internal Server Error at /status/ handler, token error.", loglevel.DebugMessage)
+			return
+		}
 	}
 
 	bibID := strings.Split(r.URL.Path[len("/status/"):], "/")[0]
 
 	if bibID == "" {
 		http.Error(w, "Error, you need to provide a Bib ID. /status/[BidID]", http.StatusBadRequest)
-		logM("Bad Request at /status/ handler, no BidID provided.", TraceMessage)
+		logM("Bad Request at /status/ handler, no BidID provided.", loglevel.TraceMessage)
 		return
 	}
 
-	parsedAPIURL, err := url.Parse(*apiURL)
+	parsedAPIURL, err := parseURLandEndpoint(*apiURL, ItemRequestEndpoint)
 	if err != nil {
-		//No recovery possible here, probable problem with URL
-		log.Fatalf("FATAL: %v", err)
+		http.Error(w, "Server Error.", http.StatusInternalServerError)
+		logM("Internal Server Error at /status/ handler, unable to parse url.", loglevel.DebugMessage)
+		return
 	}
 
-	itemStatusURL := parsedAPIURL
-	itemStatusURL.Path = path.Join(itemStatusURL.Path, ItemRequestEndpoint)
-
-	q := itemStatusURL.Query()
+	q := parsedAPIURL.Query()
 	q.Set("bibIds", bibID)
 	q.Set("deleted", "false")
-	itemStatusURL.RawQuery = q.Encode()
+	parsedAPIURL.RawQuery = q.Encode()
 
-	getItemStatus, err := http.NewRequest("GET", itemStatusURL.String(), nil)
+	getItemStatus, err := http.NewRequest("GET", parsedAPIURL.String(), nil)
 	if err != nil {
-		//No recovery possible here, probable problem with URL
-		log.Fatalf("FATAL: %v", err)
+		http.Error(w, "Request failed.", http.StatusInternalServerError)
+		logM("Internal Server Error at /status/ handler, request failed.", loglevel.DebugMessage)
+		return
 	}
 
 	setAuthorizationHeaders(getItemStatus, r, token)
@@ -254,14 +240,14 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := client.Do(getItemStatus)
 	if err != nil {
 		http.Error(w, "Error querying Sierra API", http.StatusInternalServerError)
-		logM(fmt.Sprintf("Internal Server Error at /status/ handler, GET against itemStatusURL failed: %v", err), WarnMessage)
+		logM(fmt.Sprintf("Internal Server Error at /status/ handler, GET against itemStatusURL failed: %v", err), loglevel.WarnMessage)
 		return
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
-		logM("Internal Server Error at /status/ handler, token is out of date:", WarnMessage)
-		refreshTokenChan <- true
+		logM("Internal Server Error at /status/ handler, token is out of date:", loglevel.WarnMessage)
+		tokenStore.Refresh <- struct{}{}
 		return
 	}
 
@@ -281,7 +267,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 	if err != nil {
 		http.Error(w, "JSON Decoding Error", http.StatusInternalServerError)
-		logM(fmt.Sprintf("Internal Server Error at /status/ handler, JSON Decoding Error: %v", err), WarnMessage)
+		logM(fmt.Sprintf("Internal Server Error at /status/ handler, JSON Decoding Error: %v", err), loglevel.WarnMessage)
 		return
 	}
 
@@ -310,10 +296,10 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		statusJSON.Entries = append(statusJSON.Entries, newEntry)
 	}
 
-	indentedjson, err := json.MarshalIndent(statusJSON, "", "   ")
+	finaljson, err := json.Marshal(statusJSON)
 	if err != nil {
 		http.Error(w, "JSON Encoding Error", http.StatusInternalServerError)
-		logM(fmt.Sprintf("Internal Server Error at /status/ handler, JSON Encoding Error: %v", err), WarnMessage)
+		logM(fmt.Sprintf("Internal Server Error at /status/ handler, JSON Encoding Error: %v", err), loglevel.WarnMessage)
 		return
 	}
 
@@ -329,157 +315,32 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logM(fmt.Sprintf("Sending response at /status/ handler: %v", statusJSON), TraceMessage)
+	logM(fmt.Sprintf("Sending response at /status/ handler: %v", statusJSON), loglevel.TraceMessage)
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(indentedjson)
+	w.Write(finaljson)
 
 }
 
 func rawRewriter(r *http.Request) {
 
-	token := <-tokenChan
-
-	if token == UninitializedToken {
-		logM("Error at /raw/ handler, token not yet generated.", DebugMessage)
-	}
-
-	if token == ErrorToken {
-		logM("Error at /raw/ handler, token creation failed.", WarnMessage)
-	}
-
-	parsedAPIURL, err := url.Parse(*apiURL)
+	token, err := tokenStore.Get()
 	if err != nil {
-		//No recovery possible here, probable problem with URL
+		logM("Error at /raw/ handler, token not yet generated.", loglevel.DebugMessage)
+	}
+
+	parsedAPIURL, err := parseURLandEndpoint(*apiURL, r.URL.Path[len("/raw/"):])
+	if err != nil {
 		log.Fatalf("FATAL: %v", err)
 	}
 
-	rawRequestURL := parsedAPIURL
-	rawRequestURL.Path = path.Join(rawRequestURL.Path, r.URL.Path[len("/raw/"):])
-	rawRequestURL.RawQuery = r.URL.RawQuery
+	parsedAPIURL.RawQuery = r.URL.RawQuery
 
-	r.URL = rawRequestURL
+	r.URL = parsedAPIURL
 
 	setAuthorizationHeaders(r, r, token)
 
-	logM(fmt.Sprintf("Sending proxied request: %v", r), TraceMessage)
-
-}
-
-//To stop, close refreshTokenChan
-func tokener() {
-
-	type AuthTokenResponse struct {
-		AccessToken string `json:"access_token"`
-		TokenType   string `json:"token_type"`
-		ExpiresIn   int    `json:"expires_in"`
-	}
-
-	token := UninitializedToken
-
-	mutex := new(sync.Mutex)
-	wg := new(sync.WaitGroup)
-
-	wg.Add(1)
-	go func() {
-		for _ = range refreshTokenChan {
-
-			parsedAPIURL, err := url.Parse(*apiURL)
-			if err != nil {
-				//No recovery possible here, probable problem with URL
-				log.Fatalf("FATAL: %v", err)
-			}
-
-			tokenRequestURL := parsedAPIURL
-			tokenRequestURL.Path = path.Join(tokenRequestURL.Path, TokenRequestEndpoint)
-
-			bodyValues := url.Values{}
-			bodyValues.Set("grant_type", "client_credentials")
-
-			getTokenRequest, err := http.NewRequest("POST", tokenRequestURL.String(), bytes.NewBufferString(bodyValues.Encode()))
-			if err != nil {
-				//No recovery possible here, probable problem with URL
-				log.Fatalf("FATAL: %v", err)
-			}
-
-			getTokenRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-			getTokenRequest.SetBasicAuth(*clientKey, *clientSecret)
-
-			client := &http.Client{}
-			resp, err := client.Do(getTokenRequest)
-			if err != nil {
-				mutex.Lock()
-				token = ErrorToken
-				mutex.Unlock()
-				logM(fmt.Sprintf("Unable to get new token: %v, %v", err, resp), WarnMessage)
-				continue
-			}
-
-			if resp.StatusCode != 200 {
-				mutex.Lock()
-				token = ErrorToken
-				mutex.Unlock()
-				logM("Token generation error: Client key, client secret, or API URL might be incorrect.", WarnMessage)
-				continue
-			}
-
-			var responseJSON AuthTokenResponse
-
-			err = json.NewDecoder(resp.Body).Decode(&responseJSON)
-			defer resp.Body.Close()
-			if err != nil {
-				mutex.Lock()
-				token = ErrorToken
-				mutex.Unlock()
-				logM(fmt.Sprintf("Unable to parse new token response: %v, %v", err, resp), WarnMessage)
-				continue
-			}
-
-			logM(responseJSON, TraceMessage)
-
-			mutex.Lock()
-			token = responseJSON.AccessToken
-			mutex.Unlock()
-
-			logM("Received new token from API.", TraceMessage)
-
-			//Ensure the old token value is cleared from the tokenChan
-			<-tokenChan
-
-			wg.Add(1)
-			go func() {
-				time.Sleep(time.Duration(responseJSON.ExpiresIn-20) * time.Second)
-				refreshTokenChan <- true
-				wg.Done()
-			}()
-		}
-
-		wg.Done()
-	}()
-
-	stopSending := make(chan bool)
-
-	getToken := func() string {
-		mutex.Lock()
-		defer mutex.Unlock()
-		return token
-	}
-
-	go func() {
-	SendForever:
-		for {
-			select {
-			case <-stopSending:
-				break SendForever
-			case tokenChan <- getToken():
-				logM("Sent token: "+token, TraceMessage)
-			}
-		}
-	}()
-
-	wg.Wait()
-	stopSending <- true
-	logM("Tokener shut down", TraceMessage)
+	logM(fmt.Sprintf("Sending proxied request: %v", r), loglevel.TraceMessage)
 
 }
 
@@ -505,15 +366,25 @@ func overrideUnsetFlagsFromEnvironmentVariables() {
 }
 
 //Log a message if the level is below the set LogMessageLevel
-func logM(message interface{}, messagelevel LogLevel) {
+func logM(message interface{}, messagelevel loglevel.LogLevel) {
 	if messagelevel <= LogMessageLevel {
 		log.Printf("%v: %v\n", strings.ToUpper(messagelevel.String()), message)
 	}
 }
 
+func parseURLandEndpoint(URL, endpoint string) (*url.URL, error) {
+	parsedURL, err := url.Parse(URL)
+	if err != nil {
+		return new(url.URL), errors.New("Unable to parse URL.")
+	}
+	parsedURL.Path = path.Join(parsedURL.Path, endpoint)
+	return parsedURL, nil
+}
+
 //Set the required Authorization headers.
 //This includes the Bearer token, the user agent, and X-Forwarded-For
-func setAuthorizationHeaders(nr *http.Request, or *http.Request, t string) {
+//I'd rather this be a function on http.Request types, but Go forbids that.
+func setAuthorizationHeaders(nr, or *http.Request, t string) {
 	nr.Header.Add("Authorization", "Bearer "+t)
 	nr.Header.Add("User-Agent", "Tyro")
 
@@ -524,22 +395,4 @@ func setAuthorizationHeaders(nr *http.Request, or *http.Request, t string) {
 	} else {
 		nr.Header.Add("X-Forwarded-For", originalForwardFor)
 	}
-}
-
-//TODO: The LogLevel type already has a String() function. Use that.
-func parseLogLevel(logLevel string) LogLevel {
-
-	switch logLevel {
-	case "error":
-		return ErrorMessage
-	case "warn":
-		return WarnMessage
-	case "info":
-		return InfoMessage
-	case "debug":
-		return DebugMessage
-	case "trace":
-		return TraceMessage
-	}
-	return TraceMessage
 }
