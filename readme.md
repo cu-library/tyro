@@ -4,7 +4,8 @@
 
 ##Setup: 
 
-Tyro is a standalone executable, written in Go. It should compile in Go 1.3. A web server like Nginx or Apache is not required to use it.
+Tyro is a standalone executable, written in Go. It should compile in Go 1.3.3. 
+A web server like Nginx or Apache is not required to use it.
 
     ./tyro -key=yourclientkey -secret=yourclientsecret -url=yourapiurl
 
@@ -18,10 +19,15 @@ These options are optional:
 
     -address= : The address to serve on, passed to ListenAndServe, doc here: http://golang.org/pkg/net/http/#ListenAndServe. Defaults to ":8877". 
     -raw : If supplied, this flag will turn on access to the raw Sierra API under /raw/. 
-    -acaoheader= : The origin to place in the Access-Control-Allow-Origin header. Defaults to *. Is only used for the /status/[bidID] endpoint. Multiple origins can be supplied, delimit with the ; character. Examples: -acaoheader="http://localhost:8000" -acaoheader="http://librarywebsite.com;http://catalogue.library.com" 
+    -acaoheader= : The origin to place in the Access-Control-Allow-Origin header.
+                   Defaults to *. Is only used for the /status/[bidID] endpoint. 
+                   Multiple origins can be supplied, delimit with the ; character. 
+                   Examples: 
+                   -acaoheader="http://localhost:8000" 
+                   -acaoheader="http://librarywebsite.com;http://catalogue.library.com" 
     -certfile= : The location of the Certificate file, for HTTPS.
     -keyfile= : The location of the Private Key file, for HTTPS.
-    -logfile= : Log file. By default, log messages will be printed to Stderr.
+    -logfile= : Log file. By default, log messages will be printed to stout.
     -logmaxage= : The maximum number of days to retain old log files, in days.
     -logmaxbackups= : The maximum number of old log files to keep.
     -logmaxsize= : The maximum size of log files before they are rotated, in megabytes.

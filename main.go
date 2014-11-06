@@ -50,7 +50,7 @@ const (
 	ItemRequestEndpoint  string = "items"
 
 	//Logging
-	DefaultLogFileLocation string = "Stderr"
+	DefaultLogFileLocation string = "stdout"
 	DefaultLogMaxSize      int    = 100
 	DefaultLogMaxBackups   int    = 0
 	DefaultLogMaxAge       int    = 0
@@ -66,7 +66,7 @@ var (
 	headerACAO   = flag.String("acaoheader", DefaultACAOHeader, "Access-Control-Allow-Origin Header for CORS. Multiple origins separated by ;")
 	raw          = flag.Bool("raw", DefaultRawAccess, "Allow access to the raw Sierra API under /raw/")
 
-	logFileLocation = flag.String("logfile", DefaultLogFileLocation, "Log file. By default, log messages will be printed to Sterr.")
+	logFileLocation = flag.String("logfile", DefaultLogFileLocation, "Log file. By default, log messages will be printed to stdout.")
 	logMaxSize      = flag.Int("logmaxsize", DefaultLogMaxSize, "The maximum size of log files before they are rotated, in megabytes.")
 	logMaxBackups   = flag.Int("logmaxbackups", DefaultLogMaxBackups, "The maximum number of old log files to keep.")
 	logMaxAge       = flag.Int("logmaxage", DefaultLogMaxAge, "The maximum number of days to retain old log files, in days.")
@@ -102,14 +102,16 @@ func main() {
 
 	overrideUnsetFlagsFromEnvironmentVariables()
 
-	if *logFileLocation != "Stderr" {
+	if *logFileLocation != DefaultLogFileLocation {
 		log.SetOutput(&lumberjack.Logger{
 			Filename:   *logFileLocation,
 			MaxSize:    *logMaxSize,
 			MaxBackups: *logMaxBackups,
 			MaxAge:     *logMaxAge,
 		})
-	}
+	} else {
+        log.SetOutput(os.Stdout)
+    }
 
 	logM("Starting Tyro", loglevel.InfoMessage)
 	logM("Serving on address: "+*address, loglevel.InfoMessage)
@@ -365,7 +367,7 @@ func overrideUnsetFlagsFromEnvironmentVariables() {
 	}
 }
 
-//Log a message if the level is below the set LogMessageLevel
+//Log a message if the level is below or equal to the set LogMessageLevel
 func logM(message interface{}, messagelevel loglevel.LogLevel) {
 	if messagelevel <= LogMessageLevel {
 		log.Printf("%v: %v\n", strings.ToUpper(messagelevel.String()), message)
