@@ -145,11 +145,10 @@ func main() {
 			logM(m.Message, m.Level)
 		}
 	}()
-	tokenStore.Refresher(parsedURL, clientKey, clientSecret)
+	tokenStore.Refresher(parsedURL.String(), *clientKey, *clientSecret)
 
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/status/", statusHandler)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	if *raw {
 		logM("Allowing access to raw Sierra API.", loglevel.WarnMessage)
 		rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})

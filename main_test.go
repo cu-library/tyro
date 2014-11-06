@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"testing"
 )
@@ -76,7 +75,12 @@ func TestStatusHandlerNoBibId(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	setupTokenStorage(ts.URL)
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(ts.URL, "", "")
+	go func() {
+		for _ = range tokenStore.LogMessages {
+		}
+	}()
 
 	req, err := http.NewRequest("GET", "/status/", nil)
 	if err != nil {
@@ -103,7 +107,13 @@ func TestStatusHandlerGoodResponseFromSierra(t *testing.T) {
 		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
 	}))
 	defer ts.Close()
-	setupTokenStorage(ts.URL)
+
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(ts.URL, "", "")
+	go func() {
+		for _ = range tokenStore.LogMessages {
+		}
+	}()
 
 	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, `{"entries":[{"id":2536252,"updatedDate":"2014-09-19T03:09:16Z","createdDate":"2007-05-11T18:37:00Z","deleted":false,"bibIds":[2401597],"location":{"code":"flr4 ","name":"Floor 4 Books"},"status":{"code":"-","display":"IN LIBRARY"},"barcode":"12016135026","callNumber":"|aJC578.R383|bG67 2007"}]}`)
@@ -144,7 +154,13 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
 	}))
 	defer ts.Close()
-	setupTokenStorage(ts.URL)
+
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(ts.URL, "", "")
+	go func() {
+		for _ = range tokenStore.LogMessages {
+		}
+	}()
 
 	req, err := http.NewRequest("GET", "/raw/?bibIds=1234", nil)
 	if err != nil {
@@ -172,23 +188,8 @@ func TestRawHandlerTestRewrite(t *testing.T) {
                       |_|
 */
 
-func setupTokenStorage(fakeurl string) {
-
-	exampleString := "dingding"
-	clientKey := &exampleString
-	clientSecret := &exampleString
-
-	tokenStore = tokenstore.NewTokenStore()
-	u, _ := url.Parse(fakeurl)
-	tokenStore.Refresher(u, clientKey, clientSecret)
-	go func() {
-		for _ = range tokenStore.LogMessages {
-		}
-	}()
-
-}
-
 func setupLogging() {
+
 	LogMessageLevel = loglevel.ErrorMessage
 	log.SetOutput(os.Stderr)
 }

@@ -53,7 +53,6 @@ Tyro provides the following URLs (endpoints?, routes?)
           ]
         } 
     /raw : A thin wrapper around the Sierra API. Tyro will take care of the bearer tokens and X-Forwarded-For header. 
-    /static[/file] : Serves any files in a directory named 'static' next to the executable. Used mostly for testing and demonstration purposes. Automatically serves an index.html if you visit /static. 
 
 The `/status/[bidID]` endpoint is the only one that will respect the Access-Control-Allow-Origin header. Tyro doesn't allow cross domain access to the raw Sierra API. 
 

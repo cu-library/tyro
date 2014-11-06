@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 )
@@ -52,15 +51,9 @@ func TestTokenRefresh(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	exampleString := "dingding"
-	clientKey := &exampleString
-	clientSecret := &exampleString
-
 	tok := NewTokenStore()
 
-	u, _ := url.Parse(ts.URL)
-
-	refresh, err := tok.refresh(u, clientKey, clientSecret)
+	refresh, err := tok.refresh(ts.URL, "", "")
 	if err != nil {
 		t.Error("Token refresh() should have worked.")
 	}
@@ -75,5 +68,77 @@ func TestTokenRefresh(t *testing.T) {
 	if tokenVal != "test" {
 		t.Error("Token refresh() didn't return the right value.")
 	}
+}
 
+func TestTokenRefreshFailBadNewRequest(t *testing.T) {
+
+    tok := NewTokenStore()
+
+    _, err := tok.refresh("@#J#*FHQA@J@(FFU(#R@#NR@#(RAU(A*CC*##(#", "", "")
+    if err == nil {
+        t.Error("Token refresh() should not have worked with nonsense tokenURL")
+    }
+    _, err = tok.Get()
+    if err == nil{
+        t.Error("Get should have failed with nonsense URL")
+    }
+}
+
+func TestTokenRefreshFailAuthentication(t *testing.T) {
+
+    ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusNotFound)
+        fmt.Fprintln(w, `{"error":"bad token"}`)
+    }))
+    defer ts.Close()
+
+    tok := NewTokenStore()
+
+    _, err := tok.refresh(ts.URL, "", "")
+    if err == nil {
+        t.Error("Token refresh() should not have worked with StatusNotFound on")
+    }
+    _, err = tok.Get()
+    if err == nil{
+        t.Error("Get should have failed with StatusNotFound return")
+    }
+}
+
+func TestTokenRefreshFailBadJSON(t *testing.T) {
+
+    ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusNotFound)
+        fmt.Fprintln(w, `BLAHBLAHBLAH{}{}BLAHBLAHBLAH`)
+    }))
+    defer ts.Close()
+
+    tok := NewTokenStore()
+
+    _, err := tok.refresh(ts.URL, "", "")
+    if err == nil {
+        t.Error("Token refresh() should not have worked with nonsense JSON.")
+    }
+    _, err = tok.Get()
+    if err == nil{
+        t.Error("Get should have failed with nonsense JSON")
+    }
+}
+
+func TestTokenRefreshFailShortTTL(t *testing.T) {
+
+    ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":1}`)
+    }))
+    defer ts.Close()
+
+    tok := NewTokenStore()
+
+    _, err := tok.refresh(ts.URL, "", "")
+    if err == nil {
+        t.Error("Token refresh() should not have worked with really small TTL.")
+    }
+    _, err = tok.Get()
+    if err == nil{
+        t.Error("Get should have failed with really small TTL")
+    }
 }

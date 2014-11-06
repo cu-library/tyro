@@ -28,6 +28,9 @@ const UninitialedTokenValue string = "uninitialized"
 //ask for a new token in 45 seconds.
 const TokenRefreshBuffer int = 5
 
+//If the API returns a TTL less than this, error out.
+const MinimumTokenTTL int = 10
+
 //The number of seconds a refresh will be scheduled for
 //in the event of an error.
 //Also the amount of time a Get() will wait for the initial
@@ -78,7 +81,7 @@ func (t *TokenStore) set(nt string) {
 //This function runs forever, waiting for a timeout
 //or a message on the Refresh channel. It will exit if the Refresh
 //channel is closed.
-func (t *TokenStore) Refresher(tokenURL *url.URL, clientKey, clientSecret *string) {
+func (t *TokenStore) Refresher(tokenURL, clientKey, clientSecret string) {
 
 	runRefreshSetUpNext := func() <-chan time.Time {
 		refreshIn, err := t.refresh(tokenURL, clientKey, clientSecret)
@@ -121,7 +124,7 @@ func (t *TokenStore) Refresher(tokenURL *url.URL, clientKey, clientSecret *strin
 
 }
 
-func (t *TokenStore) refresh(tokenURL *url.URL, clientKey, clientSecret *string) (int, error) {
+func (t *TokenStore) refresh(tokenURL, clientKey, clientSecret string) (int, error) {
 
 	type AuthTokenResponse struct {
 		AccessToken string `json:"access_token"`
@@ -131,14 +134,14 @@ func (t *TokenStore) refresh(tokenURL *url.URL, clientKey, clientSecret *string)
 
 	bodyValues := url.Values{}
 	bodyValues.Set("grant_type", "client_credentials")
-	getTokenRequest, err := http.NewRequest("POST", tokenURL.String(), bytes.NewBufferString(bodyValues.Encode()))
+	getTokenRequest, err := http.NewRequest("POST", tokenURL, bytes.NewBufferString(bodyValues.Encode()))
 	if err != nil {
 		t.set("")
 		t.LogMessages <- LogMessage{err, loglevel.WarnMessage}
 		return 0, err
 	}
 	getTokenRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	getTokenRequest.SetBasicAuth(*clientKey, *clientSecret)
+	getTokenRequest.SetBasicAuth(clientKey, clientSecret)
 	client := new(http.Client)
 	resp, err := client.Do(getTokenRequest)
 	if err != nil {
@@ -149,7 +152,7 @@ func (t *TokenStore) refresh(tokenURL *url.URL, clientKey, clientSecret *string)
 	if resp.StatusCode != 200 {
 		t.set("")
 		t.LogMessages <- LogMessage{err, loglevel.WarnMessage}
-		return 0, errors.New("Unable to authenticate to token generator.")
+		return 0, fmt.Errorf("Unable to authenticate to token generator, %v", resp.StatusCode)
 	}
 
 	var responseJSON AuthTokenResponse
@@ -163,9 +166,9 @@ func (t *TokenStore) refresh(tokenURL *url.URL, clientKey, clientSecret *string)
 		return 0, err
 	}
 
-	if responseJSON.ExpiresIn < 10 {
+	if responseJSON.ExpiresIn < MinimumTokenTTL {
 		t.set("")
-		return 0, errors.New("Token is set for too small a time.")
+		return 0, errors.New("Token has a expire_in that is too small.")
 	} else {
 		t.LogMessages <- LogMessage{"Recieved Token", loglevel.TraceMessage}
 		t.set(responseJSON.AccessToken)
