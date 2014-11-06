@@ -170,7 +170,7 @@ func (t *TokenStore) refresh(tokenURL, clientKey, clientSecret string) (int, err
 		t.set("")
 		return 0, errors.New("Token has a expire_in that is too small.")
 	} else {
-		t.LogMessages <- LogMessage{"Recieved Token", loglevel.TraceMessage}
+		t.LogMessages <- LogMessage{"Received Token", loglevel.TraceMessage}
 		t.set(responseJSON.AccessToken)
 		return responseJSON.ExpiresIn, nil
 	}

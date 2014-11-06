@@ -189,7 +189,6 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 */
 
 func setupLogging() {
-
 	LogMessageLevel = loglevel.ErrorMessage
 	log.SetOutput(os.Stderr)
 }

@@ -110,8 +110,8 @@ func main() {
 			MaxAge:     *logMaxAge,
 		})
 	} else {
-        log.SetOutput(os.Stdout)
-    }
+		log.SetOutput(os.Stdout)
+	}
 
 	logM("Starting Tyro", loglevel.InfoMessage)
 	logM("Serving on address: "+*address, loglevel.InfoMessage)
