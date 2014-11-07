@@ -80,17 +80,17 @@ var (
 func init() {
 
 	flag.Usage = func() {
-		fmt.Print("Tyro: A helper for Sierra APIs\n\n")
+		fmt.Fprint(os.Stderr, "Tyro: A helper for Sierra APIs\n\n")
 		flag.PrintDefaults()
-		fmt.Println("  The possible environment variables:")
+		fmt.Fprintln(os.Stderr, "  The possible environment variables:")
 
 		flag.VisitAll(func(f *flag.Flag) {
 			uppercaseName := strings.ToUpper(f.Name)
-			fmt.Printf("  %v%v\n", EnvPrefix, uppercaseName)
+			fmt.Fprintf(os.Stderr,"  %v%v\n", EnvPrefix, uppercaseName)
 		})
 
-		fmt.Println("If a certificate file is provided, Tyro will attempt to use HTTPS.")
-		fmt.Println("The Access-Control-Allow-Origin header for CORS is only set for the /status/[bibID] endpoint.")
+		fmt.Fprintln(os.Stderr,"If a certificate file is provided, Tyro will attempt to use HTTPS.")
+		fmt.Fprintln(os.Stderr,"The Access-Control-Allow-Origin header for CORS is only set for the /status/[bibID] endpoint.")
 	}
 }
 
@@ -384,16 +384,21 @@ func parseURLandEndpoint(URL, endpoint string) (*url.URL, error) {
 }
 
 //Set the required Authorization headers.
-//This includes the Bearer token, the user agent, and X-Forwarded-For
-//I'd rather this be a function on http.Request types, but Go forbids that.
+//This includes the Bearer token, User-Agent, and X-Forwarded-For
+//I'd rather this be a function on http.Request types, but Go 
+//forbids that without embedding in a new type. 
 func setAuthorizationHeaders(nr, or *http.Request, t string) {
 	nr.Header.Add("Authorization", "Bearer "+t)
 	nr.Header.Add("User-Agent", "Tyro")
 
 	originalForwardFor := or.Header.Get("X-Forwarded-For")
 	if originalForwardFor == "" {
-		ip, _, _ := net.SplitHostPort(or.RemoteAddr)
-		nr.Header.Add("X-Forwarded-For", ip)
+		ip, _, err := net.SplitHostPort(or.RemoteAddr)
+        if err != nil{
+            logM("The remote address in an incoming request is not set properly", loglevel.TraceMessage)
+        } else {
+            nr.Header.Add("X-Forwarded-For", ip)
+        }
 	} else {
 		nr.Header.Add("X-Forwarded-For", originalForwardFor)
 	}

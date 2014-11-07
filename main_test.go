@@ -15,15 +15,6 @@ import (
 	"testing"
 )
 
-/*
-  _   _                        _   _                 _ _
- | | | | ___  _ __ ___   ___  | | | | __ _ _ __   __| | | ___ _ __
- | |_| |/ _ \| '_ ` _ \ / _ \ | |_| |/ _` | '_ \ / _` | |/ _ \ '__|
- |  _  | (_) | | | | | |  __/ |  _  | (_| | | | | (_| | |  __/ |
- |_| |_|\___/|_| |_| |_|\___| |_| |_|\__,_|_| |_|\__,_|_|\___|_|
-
-*/
-
 func TestHomeHandler(t *testing.T) {
 
 	setupLogging()
@@ -57,15 +48,6 @@ func TestHomeHandler404(t *testing.T) {
 		t.Errorf("Home handler didn't return %v for url which should not exist.", http.StatusNotFound)
 	}
 }
-
-/*
-  ____  _        _               _   _                 _ _
- / ___|| |_ __ _| |_ _   _ ___  | | | | __ _ _ __   __| | | ___ _ __
- \___ \| __/ _` | __| | | / __| | |_| |/ _` | '_ \ / _` | |/ _ \ '__|
-  ___) | || (_| | |_| |_| \__ \ |  _  | (_| | | | | (_| | |  __/ |
- |____/ \__\__,_|\__|\__,_|___/ |_| |_|\__,_|_| |_|\__,_|_|\___|_|
-
-*/
 
 func TestStatusHandlerNoBibId(t *testing.T) {
 
@@ -138,15 +120,6 @@ func TestStatusHandlerGoodResponseFromSierra(t *testing.T) {
 	}
 }
 
-/*
-  ____                  _   _                 _ _
- |  _ \ __ ___      __ | | | | __ _ _ __   __| | | ___ _ __
- | |_) / _` \ \ /\ / / | |_| |/ _` | '_ \ / _` | |/ _ \ '__|
- |  _ < (_| |\ V  V /  |  _  | (_| | | | | (_| | |  __/ |
- |_| \_\__,_| \_/\_/   |_| |_|\__,_|_| |_|\__,_|_|\___|_|
-
-*/
-
 func TestRawHandlerTestRewrite(t *testing.T) {
 
 	setupLogging()
@@ -179,14 +152,74 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 
 }
 
-/*
-  ____       _
- / ___|  ___| |_ _   _ _ __
- \___ \ / _ \ __| | | | '_ \
-  ___) |  __/ |_| |_| | |_) |
- |____/ \___|\__|\__,_| .__/
-                      |_|
-*/
+func TestParseURLandEndpoint(t *testing.T){
+
+    goodURL := "http://test.com"
+    endpoint := "test"
+    badURL := ":"
+
+    parsedURL, err := parseURLandEndpoint(goodURL, endpoint)
+    if err != nil{
+       t.Error("The parse should not have failed.")
+    }
+    if parsedURL.String() != "http://test.com/test" {
+       t.Error("Bad join")
+    }
+
+    parsedURL, err = parseURLandEndpoint(badURL, endpoint)
+    if err == nil{
+       t.Error("Parse should have failed")
+    }
+
+
+
+}
+
+func TestSettingAuthorizationHeaders(t *testing.T) {
+
+    //The default case
+
+	oldRequest, _ := http.NewRequest("GET", "/test", nil)
+	oldRequest.RemoteAddr = "7.7.7.7:8888"
+	newRequest, _ := http.NewRequest("GET", "/test", nil)
+
+	setAuthorizationHeaders(newRequest, oldRequest, "token")
+
+	if newRequest.Header.Get("Authorization") != "Bearer token"{
+        t.Error("The Authorization header is not being set properly.")
+	}
+	if newRequest.Header.Get("User-Agent") != "Tyro"{
+        t.Error("The User-Agent header is not being set properly.")
+	}
+	if newRequest.Header.Get("X-Forwarded-For") != "7.7.7.7" {
+        t.Error("The X-Forwarded-For header is not being set properly.")
+	}
+
+	//Badly formed remoteaddr
+
+	oldRequest, _ = http.NewRequest("GET", "/test", nil)
+	oldRequest.RemoteAddr = ":wef:wf:"
+	newRequest, _ = http.NewRequest("GET", "/test", nil)
+
+	setAuthorizationHeaders(newRequest, oldRequest, "token")
+	
+	if newRequest.Header.Get("X-Forwarded-For") != "" {
+        t.Error("The X-Forwarded-For header is being set when it shouldn't be.")
+	}
+
+	//An X-Forwarded-For in the incoming request
+
+	oldRequest, _ = http.NewRequest("GET", "/test", nil)
+	oldRequest.Header.Add("X-Forwarded-For", "1.2.3.4")
+	newRequest, _ = http.NewRequest("GET", "/test", nil)
+
+	setAuthorizationHeaders(newRequest, oldRequest, "token")
+	
+	if newRequest.Header.Get("X-Forwarded-For") != "1.2.3.4" {
+        t.Error("The X-Forwarded-For header is not being set properly.")
+	}
+
+}
 
 func setupLogging() {
 	LogMessageLevel = loglevel.ErrorMessage
