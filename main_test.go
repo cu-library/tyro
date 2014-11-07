@@ -152,32 +152,30 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 
 }
 
-func TestParseURLandEndpoint(t *testing.T){
+func TestParseURLandEndpoint(t *testing.T) {
 
-    goodURL := "http://test.com"
-    endpoint := "test"
-    badURL := ":"
+	goodURL := "http://test.com"
+	endpoint := "test"
+	badURL := ":"
 
-    parsedURL, err := parseURLandEndpoint(goodURL, endpoint)
-    if err != nil{
-       t.Error("The parse should not have failed.")
-    }
-    if parsedURL.String() != "http://test.com/test" {
-       t.Error("Bad join")
-    }
+	parsedURL, err := parseURLandEndpoint(goodURL, endpoint)
+	if err != nil {
+		t.Error("The parse should not have failed.")
+	}
+	if parsedURL.String() != "http://test.com/test" {
+		t.Error("Bad join")
+	}
 
-    parsedURL, err = parseURLandEndpoint(badURL, endpoint)
-    if err == nil{
-       t.Error("Parse should have failed")
-    }
-
-
+	parsedURL, err = parseURLandEndpoint(badURL, endpoint)
+	if err == nil {
+		t.Error("Parse should have failed")
+	}
 
 }
 
 func TestSettingAuthorizationHeaders(t *testing.T) {
 
-    //The default case
+	//The default case
 
 	oldRequest, _ := http.NewRequest("GET", "/test", nil)
 	oldRequest.RemoteAddr = "7.7.7.7:8888"
@@ -185,14 +183,14 @@ func TestSettingAuthorizationHeaders(t *testing.T) {
 
 	setAuthorizationHeaders(newRequest, oldRequest, "token")
 
-	if newRequest.Header.Get("Authorization") != "Bearer token"{
-        t.Error("The Authorization header is not being set properly.")
+	if newRequest.Header.Get("Authorization") != "Bearer token" {
+		t.Error("The Authorization header is not being set properly.")
 	}
-	if newRequest.Header.Get("User-Agent") != "Tyro"{
-        t.Error("The User-Agent header is not being set properly.")
+	if newRequest.Header.Get("User-Agent") != "Tyro" {
+		t.Error("The User-Agent header is not being set properly.")
 	}
 	if newRequest.Header.Get("X-Forwarded-For") != "7.7.7.7" {
-        t.Error("The X-Forwarded-For header is not being set properly.")
+		t.Error("The X-Forwarded-For header is not being set properly.")
 	}
 
 	//Badly formed remoteaddr
@@ -202,9 +200,9 @@ func TestSettingAuthorizationHeaders(t *testing.T) {
 	newRequest, _ = http.NewRequest("GET", "/test", nil)
 
 	setAuthorizationHeaders(newRequest, oldRequest, "token")
-	
+
 	if newRequest.Header.Get("X-Forwarded-For") != "" {
-        t.Error("The X-Forwarded-For header is being set when it shouldn't be.")
+		t.Error("The X-Forwarded-For header is being set when it shouldn't be.")
 	}
 
 	//An X-Forwarded-For in the incoming request
@@ -214,9 +212,9 @@ func TestSettingAuthorizationHeaders(t *testing.T) {
 	newRequest, _ = http.NewRequest("GET", "/test", nil)
 
 	setAuthorizationHeaders(newRequest, oldRequest, "token")
-	
+
 	if newRequest.Header.Get("X-Forwarded-For") != "1.2.3.4" {
-        t.Error("The X-Forwarded-For header is not being set properly.")
+		t.Error("The X-Forwarded-For header is not being set properly.")
 	}
 
 }
