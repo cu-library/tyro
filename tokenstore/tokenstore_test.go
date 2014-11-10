@@ -169,7 +169,7 @@ func TestRefresherTimeout(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		if ran == false {
 			t.Log("Go first")
-			fmt.Fprintln(w, `{"access_token":"firsttoken","token_type":"bearer","expires_in":20}`)
+			fmt.Fprintln(w, `{"access_token":"firsttoken","token_type":"bearer","expires_in":10}`)
 		} else {
 			t.Log("Go second")
 			fmt.Fprintln(w, `{"access_token":"secondtoken","token_type":"bearer","expires_in":3600}`)
@@ -205,7 +205,7 @@ func TestRefresherTimeout(t *testing.T) {
 		t.Error("Unexpected token value")
 	}
 
-	time.Sleep(18 * time.Second)
+	time.Sleep(12 * time.Second)
 
 	token, err = tok.Get()
 	if err != nil {
