@@ -370,7 +370,7 @@ func overrideUnsetFlagsFromEnvironmentVariables() {
 //Log a message if the level is below or equal to the set LogMessageLevel
 func logM(message interface{}, messagelevel loglevel.LogLevel) {
 	if messagelevel <= LogMessageLevel {
-		log.Printf("%v: %v\n", strings.ToUpper(messagelevel.String()), message)
+		log.Printf("%v: %v\n", messagelevel.String(), message)
 	}
 }
 

@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/cudevmaxwell/tyro/loglevel"
 	"github.com/cudevmaxwell/tyro/tokenstore"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -123,6 +125,7 @@ func TestStatusHandlerGoodResponseFromSierra(t *testing.T) {
 func TestRawHandlerTestRewrite(t *testing.T) {
 
 	setupLogging()
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
 	}))
@@ -152,7 +155,42 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 
 }
 
+func TestLoggingLevels(t *testing.T) {
+
+	logLevelToExpectedLength := map[loglevel.LogLevel]int{
+		loglevel.ErrorMessage: 2,
+		loglevel.WarnMessage:  3,
+		loglevel.InfoMessage:  4,
+		loglevel.DebugMessage: 5,
+		loglevel.TraceMessage: 6,
+	} //One more than expected, because of empty string at end of Split()
+
+	logLevels := []loglevel.LogLevel{
+		loglevel.ErrorMessage,
+		loglevel.WarnMessage,
+		loglevel.InfoMessage,
+		loglevel.DebugMessage,
+		loglevel.TraceMessage,
+	}
+
+	for _, level := range logLevels {
+		b := new(bytes.Buffer)
+		LogMessageLevel = level
+		for _, messageLevel := range logLevels {
+			log.SetOutput(b)
+			logM("x", messageLevel)
+		}
+		if len(strings.Split(b.String(), "\n")) != logLevelToExpectedLength[level] {
+			t.Logf("%#v", strings.Split(b.String(), "\n"))
+			t.Errorf("The log level %v logged the wrong number of messages.", level)
+		}
+	}
+
+}
+
 func TestParseURLandEndpoint(t *testing.T) {
+
+	setupLogging()
 
 	goodURL := "http://test.com"
 	endpoint := "test"
@@ -174,6 +212,8 @@ func TestParseURLandEndpoint(t *testing.T) {
 }
 
 func TestSettingAuthorizationHeaders(t *testing.T) {
+
+	setupLogging()
 
 	//The default case
 
