@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 )
@@ -64,6 +65,99 @@ func TestStatusHandler(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Status handler didn't return %v.", http.StatusBadRequest)
 	}
+}
+
+func TestStatusItemHandlerNoItemId(t *testing.T) {
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer ts.Close()
+
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(ts.URL, "", "")
+	defer close(tokenStore.Refresh)
+
+	req, err := http.NewRequest("GET", "/status/item/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	statusItemHandler(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status handler didn't error %v when no item id provided", http.StatusBadRequest)
+	}
+
+	if w.Body.String() != "Error, you need to provide an ItemID. /status/item/[ItemID]\n" {
+		t.Error("Status handler didn't return the correct information when no item id provided")
+	}
+
+}
+
+func TestStatusItemHandlerGoodResponseFromSierra(t *testing.T) {
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer ts.Close()
+
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(ts.URL, "", "")
+	defer close(tokenStore.Refresh)
+
+	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"id":2536252,"updatedDate":"2014-09-19T03:09:16Z","createdDate":"2007-05-11T18:37:00Z","deleted":false,"bibIds":[2401597],"location":{"code":"flr4 ","name":"Floor 4 Books"},"status":{"code":"-","display":"IN LIBRARY"},"barcode":"12016135026","callNumber":"|aJC578.R383|bG67 2007"}`)
+	}))
+	defer ts2.Close()
+
+	//Get statusBibIDHandler to look at our mocked server
+	oldAPIURL := *apiURL
+	*apiURL = ts2.URL
+	defer func() { *apiURL = oldAPIURL }()
+
+	req, err := http.NewRequest("GET", "/status/item/2401597", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	statusItemHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status handler didn't return %v when provided with a good response.", http.StatusBadRequest)
+	}
+}
+
+func TestStatusItemHandlerBadURLParse(t *testing.T) {
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer ts.Close()
+
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(ts.URL, "", "")
+	defer close(tokenStore.Refresh)
+
+	r, err := http.NewRequest("GET", "/status/item/2401597", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+
+	oldAPIURL := *apiURL
+	*apiURL = ":"
+	defer func() { *apiURL = oldAPIURL }()
+
+	statusItemHandler(w, r)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Error("Should have returned InternalServerError")
+	}
+
 }
 
 func TestStatusBibHandlerNoBibId(t *testing.T) {
@@ -129,6 +223,36 @@ func TestStatusBibHandlerGoodResponseFromSierra(t *testing.T) {
 	}
 }
 
+func TestStatusBibHandlerBadURLParse(t *testing.T) {
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer ts.Close()
+
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(ts.URL, "", "")
+	defer close(tokenStore.Refresh)
+
+	r, err := http.NewRequest("GET", "/status/bib/2401597", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+
+	oldAPIURL := *apiURL
+	*apiURL = ":"
+	defer func() { *apiURL = oldAPIURL }()
+
+	statusBibHandler(w, r)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Error("Should have returned InternalServerError")
+	}
+
+}
+
 func TestRawHandlerTestRewrite(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +281,21 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 
 }
 
+func TestOverrideUnsetFlagsFromEnvVars(t *testing.T) {
+
+	oldAddress := os.Getenv(EnvPrefix + "ADDRESS")
+	defer os.Setenv(EnvPrefix+"ADDRESS", oldAddress)
+	newAddress := ":7654"
+	os.Setenv(EnvPrefix+"ADDRESS", newAddress)
+
+	overrideUnsetFlagsFromEnvironmentVariables()
+
+	if *address != ":7654" {
+		t.Error("Didn't override unset flags.")
+	}
+
+}
+
 func TestParseURLandJoinToPath(t *testing.T) {
 
 	goodURL := "http://test.com"
@@ -171,7 +310,7 @@ func TestParseURLandJoinToPath(t *testing.T) {
 		t.Error("Bad join")
 	}
 
-	parsedURL, err = parseURLandJoinToPath(badURL, endpoint)
+	_, err = parseURLandJoinToPath(badURL, endpoint)
 	if err == nil {
 		t.Error("Parse should have failed")
 	}
