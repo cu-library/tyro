@@ -67,7 +67,7 @@ Tyro provides the following URLs (endpoints?, routes?)
             Location: "Floor 4 Books"
         }
 
-This extra endpoint will provided if `-raw` is passed as a flag or the TYRO_RAW environment variable is set to True.
+This extra endpoint will be provided if `-raw` is passed as a flag or the `TYRO_RAW` environment variable is set to True.
 
     /raw : A thin wrapper around the Sierra API. Tyro will take care of the bearer tokens and X-Forwarded-For header. 
 
