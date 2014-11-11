@@ -8,16 +8,17 @@ import (
 	"fmt"
 	l "github.com/cudevmaxwell/tyro/loglevel"
 	"github.com/cudevmaxwell/tyro/tokenstore"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-    "io/ioutil"
+	"time"
 )
 
-func init(){
-    l.Set(l.ErrorMessage)
-    log.SetOutput(ioutil.Discard)
+func init() {
+	l.Set(l.ErrorMessage)
+	log.SetOutput(ioutil.Discard)
 }
 
 func TestHomeHandler(t *testing.T) {
@@ -74,7 +75,7 @@ func TestStatusBibHandlerNoBibId(t *testing.T) {
 
 	tokenStore = tokenstore.NewTokenStore()
 	tokenStore.Refresher(ts.URL, "", "")
-    defer close(tokenStore.Refresh)
+	defer close(tokenStore.Refresh)
 
 	req, err := http.NewRequest("GET", "/status/bib/", nil)
 	if err != nil {
@@ -103,7 +104,7 @@ func TestStatusBibHandlerGoodResponseFromSierra(t *testing.T) {
 
 	tokenStore = tokenstore.NewTokenStore()
 	tokenStore.Refresher(ts.URL, "", "")
-    defer close(tokenStore.Refresh)
+	defer close(tokenStore.Refresh)
 
 	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, `{"entries":[{"id":2536252,"updatedDate":"2014-09-19T03:09:16Z","createdDate":"2007-05-11T18:37:00Z","deleted":false,"bibIds":[2401597],"location":{"code":"flr4 ","name":"Floor 4 Books"},"status":{"code":"-","display":"IN LIBRARY"},"barcode":"12016135026","callNumber":"|aJC578.R383|bG67 2007"}]}`)
@@ -137,7 +138,7 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 
 	tokenStore = tokenstore.NewTokenStore()
 	tokenStore.Refresher(ts.URL, "", "")
-    defer close(tokenStore.Refresh)
+	defer close(tokenStore.Refresh)
 
 	req, err := http.NewRequest("GET", "/raw/?bibIds=1234", nil)
 	if err != nil {
@@ -177,21 +178,71 @@ func TestParseURLandJoinToPath(t *testing.T) {
 
 }
 
-func TestGetTokenOrErrorFailTokenStore(t *testing.T){
+func TestGetTokenOrErrorFailTokenStoreInitialized(t *testing.T) {
 
-    tokenStore = tokenstore.NewTokenStore()
-    tokenStore.Refresher(":", "", "")
-    defer close(tokenStore.Refresh)
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(":", "", "")
+	defer close(tokenStore.Refresh)
 
-    r, err := http.NewRequest("GET", "/raw/?bibIds=1234", nil)
-    if err != nil {
-        t.Fatal(err)
-    }
-    w := httptest.NewRecorder()
+	r, err := http.NewRequest("GET", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
 
-    if _, err := getTokenOrError(w, r); err == nil{
-        t.Error("Should have failed with unparseable URL.")
-    }    
+	<-tokenStore.Initialized
+
+	if _, err := getTokenOrError(w, r); err == nil {
+		t.Error("Should have failed with unparseable URL.")
+	}
+
+	if w.Code != http.StatusInternalServerError {
+		t.Error("Should have returned a InternalServerError")
+	}
+
+}
+
+func TestGetTokenOrErrorFailTokenStoreUninitialized(t *testing.T) {
+
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(":", "", "")
+	defer close(tokenStore.Refresh)
+
+	r, err := http.NewRequest("GET", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+
+	if _, err := getTokenOrError(w, r); err == nil {
+		t.Error("Should have failed with unparseable URL.")
+	}
+
+	if w.Code != http.StatusInternalServerError {
+		t.Error("Should have returned a InternalServerError")
+	}
+
+}
+
+func TestGetTokenOrErrorFailTokenStoreTimeout(t *testing.T) {
+
+	tokenStore = tokenstore.NewTokenStore()
+
+	r, err := http.NewRequest("GET", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+
+	time.Sleep(time.Second * 31)
+
+	if _, err := getTokenOrError(w, r); err == nil {
+		t.Error("Should have failed with unparseable URL.")
+	}
+
+	if w.Code != http.StatusInternalServerError {
+		t.Error("Should have returned a InternalServerError")
+	}
 
 }
 
@@ -275,4 +326,3 @@ func TestSetACAOHeaderMatchOnList(t *testing.T) {
 		t.Error("Access-Control-Allow-Origin not set properly.")
 	}
 }
-
