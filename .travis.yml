@@ -2,7 +2,6 @@ language: go
 
 go:
   - 1.3.3
-  - tip
 
 env:
   - GOARCH=amd64
