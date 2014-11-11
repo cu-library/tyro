@@ -58,9 +58,15 @@ Tyro provides the following URLs (endpoints?, routes?)
             }
           ]
         } 
+    /status/item/[itemID] : Status JSON, returns a JSON doc like: 
+        {
+            CallNumber: " JC578.R383 G67 2007",
+            Status: "IN LIBRARY",
+            Location: "Floor 4 Books"
+        }
     /raw : A thin wrapper around the Sierra API. Tyro will take care of the bearer tokens and X-Forwarded-For header. 
 
-The `/status/[bidID]` endpoint is the only one that will respect the Access-Control-Allow-Origin header. Tyro doesn't allow cross domain access to the raw Sierra API. 
+The `/status/bib/[bibID]` and `/status/item/[itemID]` endpoints are the only ones that will respect the Access-Control-Allow-Origin header. Tyro doesn't allow cross domain access to the raw Sierra API. 
 
 This software is now in beta. Please create issues for bugs or feature requests. 
 
