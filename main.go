@@ -18,7 +18,6 @@ import (
 	l "github.com/cudevmaxwell/tyro/loglevel"
 	"github.com/cudevmaxwell/tyro/sierraapi"
 	"github.com/cudevmaxwell/tyro/tokenstore"
-	"gopkg.in/cudevmaxwell-vendor/lumberjack.v2"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -87,16 +86,11 @@ func main() {
 
 	overrideUnsetFlagsFromEnvironmentVariables()
 
-	if *logFileLocation != l.DefaultLogFileLocation {
-		log.SetOutput(&lumberjack.Logger{
-			Filename:   *logFileLocation,
-			MaxSize:    *logMaxSize,
-			MaxBackups: *logMaxBackups,
-			MaxAge:     *logMaxAge,
-		})
-	} else {
-		log.SetOutput(os.Stdout)
-	}
+	l.SetupLumberjack(
+		*logFileLocation,
+		*logMaxSize,
+		*logMaxBackups,
+		*logMaxAge)
 
 	l.Log("Starting Tyro", l.InfoMessage)
 	l.Log("Serving on address: "+*address, l.InfoMessage)

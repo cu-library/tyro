@@ -10,7 +10,13 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"io/ioutil"
+	"log"
 )
+
+func init(){
+	log.SetOutput(ioutil.Discard)
+}
 
 func TestTokenSetAndGet(t *testing.T) {
 
@@ -278,7 +284,7 @@ func TestRefresherRequestError(t *testing.T) {
 		t.Error("Get should have failed after initial value assigned.")
 	}
 
-	time.Sleep(time.Duration(DefaultRefreshTime) * time.Second)
+	time.Sleep(time.Duration(DefaultRefreshTime+2) * time.Second)
 
 	token, err := tok.Get()
 	if err != nil {

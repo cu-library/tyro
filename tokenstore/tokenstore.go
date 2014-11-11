@@ -33,9 +33,7 @@ const MinimumTokenTTL int = 10
 
 //The number of seconds a refresh will be scheduled for
 //in the event of an error.
-//Also the amount of time a Get() will wait for the initial
-//token
-const DefaultRefreshTime int = 30
+const DefaultRefreshTime int = 10
 
 type TokenStore struct {
 	Lock        sync.RWMutex
@@ -81,12 +79,9 @@ func (t *TokenStore) Refresher(tokenURL, clientKey, clientSecret string) {
 		refreshIn, err := t.refresh(tokenURL, clientKey, clientSecret)
 		if err != nil {
 			l.Log(err, l.ErrorMessage)
-			refreshIn = DefaultRefreshTime
+			refreshIn = DefaultRefreshTime + TokenRefreshBuffer
 		}
 		futureTime := refreshIn - TokenRefreshBuffer
-		if futureTime < TokenRefreshBuffer {
-			futureTime = TokenRefreshBuffer
-		}
 		lm := fmt.Sprintf("%v seconds in the future, a refresh will happen.", futureTime)
 		l.Log(lm, l.TraceMessage)
 		return time.After(time.Duration(futureTime) * time.Second)
