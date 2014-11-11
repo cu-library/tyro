@@ -47,14 +47,16 @@ type ItemRecordsOut struct {
 }
 
 func (in *ItemRecordIn) Convert() *ItemRecordOut {
+
 	out := new(ItemRecordOut)
 	out.CallNumber = in.CallNumber
 	out.CallNumber = strings.Replace(out.CallNumber, "|a", " ", -1)
 	out.CallNumber = strings.Replace(out.CallNumber, "|b", " ", -1)
+	out.CallNumber = strings.TrimSpace(out.CallNumber)
 	if in.Status.DueDate.IsZero() {
-		out.Status = "IN LIBRARY"
+		out.Status = "In Library"
 	} else {
-		out.Status = "DUE " + in.Status.DueDate.Format("January 2, 2006")
+		out.Status = "Due " + in.Status.DueDate.Format("January 2, 2006")
 	}
 	out.Location = in.Location.Name
 
@@ -82,7 +84,7 @@ func SendRequestToAPI(apiURL, token string, w http.ResponseWriter, r *http.Reque
 
 	err = SetAuthorizationHeaders(req, r, token)
 	if err != nil {
-		l.Log("The remote address in an incoming request is not set properly", l.WarnMessage)
+		l.Log("The remote address in an incoming request is not set properly.", l.WarnMessage)
 	}
 
 	client := &http.Client{}
