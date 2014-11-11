@@ -2,6 +2,8 @@
 
 *Ty·ro: noun, a beginner or novice.*
 
+[![Build Status](https://travis-ci.org/cudevmaxwell/tyro.svg?branch=master)](https://travis-ci.org/cudevmaxwell/tyro)
+
 ##Setup: 
 
 Tyro is a standalone executable, written in Go. It should compile in Go 1.3.3. 
