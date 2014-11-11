@@ -66,9 +66,13 @@ Tyro provides the following URLs (endpoints?, routes?)
             Status: "IN LIBRARY",
             Location: "Floor 4 Books"
         }
+
+This extra endpoint will provided if `-raw` is passed as a flag or the TYRO_RAW environment variable is set to True.
+
     /raw : A thin wrapper around the Sierra API. Tyro will take care of the bearer tokens and X-Forwarded-For header. 
 
-The `/status/bib/[bibID]` and `/status/item/[itemID]` endpoints are the only ones that will respect the Access-Control-Allow-Origin header. Tyro doesn't allow cross domain access to the raw Sierra API. 
+The `/status/bib/[bibID]` and `/status/item/[itemID]` endpoints are the only ones that will respect the Access-Control-Allow-Origin header. 
+If the 'raw' setting is turned on, requests sent to `/raw/` will receive whatever the Sierra API would return if the client had authenticated itself. 
 
 This software is now in beta. Please create issues for bugs or feature requests. 
 
