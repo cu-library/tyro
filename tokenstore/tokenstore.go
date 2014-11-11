@@ -36,8 +36,8 @@ const MinimumTokenTTL int = 10
 const DefaultRefreshTime int = 10
 
 type TokenStore struct {
-	Lock        sync.RWMutex
-	Value       string
+	lock        sync.RWMutex
+	value       string
 	Refresh     chan struct{}
 	Initialized chan struct{}
 }
@@ -46,28 +46,28 @@ func NewTokenStore() *TokenStore {
 	t := new(TokenStore)
 	t.Refresh = make(chan struct{})
 	t.Initialized = make(chan struct{}, 1)
-	t.Value = UninitialedTokenValue
+	t.value = UninitialedTokenValue
 
 	return t
 }
 
 func (t *TokenStore) Get() (string, error) {
-	t.Lock.RLock()
-	defer t.Lock.RUnlock()
-	if t.Value == "" {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+	if t.value == "" {
 		return "", errors.New("Token generation error.")
 	}
 	l.Log("Sending token.", l.TraceMessage)
-	return t.Value, nil
+	return t.value, nil
 }
 
 func (t *TokenStore) set(nt string) {
-	t.Lock.Lock()
-	defer t.Lock.Unlock()
-	if t.Value == UninitialedTokenValue {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	if t.value == UninitialedTokenValue {
 		t.Initialized <- struct{}{}
 	}
-	t.Value = nt
+	t.value = nt
 }
 
 //This function runs forever, waiting for a timeout

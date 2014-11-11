@@ -122,6 +122,7 @@ func main() {
 	}
 
 	tokenStore.Refresher(parsedURL.String(), *clientKey, *clientSecret)
+	defer close(tokenStore.Refresh)
 
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/status/", statusHandler)
