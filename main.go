@@ -15,11 +15,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/cudevmaxwell/tyro/loglevel"
+	l "github.com/cudevmaxwell/tyro/loglevel"
+	"github.com/cudevmaxwell/tyro/sierraapi"
 	"github.com/cudevmaxwell/tyro/tokenstore"
 	"gopkg.in/cudevmaxwell-vendor/lumberjack.v2"
 	"log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -41,24 +41,11 @@ const (
 
 	//The default Access-Control-Allow-Origin header (CORS)
 	DefaultACAOHeader string = "*"
-
-	//API URL
-	DefaultURL string = "https://sandbox.iii.com/iii/sierra-api/v1/"
-
-	//API Endpoints
-	TokenRequestEndpoint string = "token"
-	ItemRequestEndpoint  string = "items"
-
-	//Logging
-	DefaultLogFileLocation string = "stdout"
-	DefaultLogMaxSize      int    = 100
-	DefaultLogMaxBackups   int    = 0
-	DefaultLogMaxAge       int    = 0
 )
 
 var (
 	address      = flag.String("address", DefaultAddress, "Address for the server to bind on.")
-	apiURL       = flag.String("url", DefaultURL, "API url.")
+	apiURL       = flag.String("url", sierraapi.DefaultURL, "API url.")
 	certFile     = flag.String("certfile", "", "Certificate file location.")
 	keyFile      = flag.String("keyfile", "", "Private key file location.")
 	clientKey    = flag.String("key", "", "Client Key")
@@ -66,15 +53,13 @@ var (
 	headerACAO   = flag.String("acaoheader", DefaultACAOHeader, "Access-Control-Allow-Origin Header for CORS. Multiple origins separated by ;")
 	raw          = flag.Bool("raw", DefaultRawAccess, "Allow access to the raw Sierra API under /raw/")
 
-	logFileLocation = flag.String("logfile", DefaultLogFileLocation, "Log file. By default, log messages will be printed to stdout.")
-	logMaxSize      = flag.Int("logmaxsize", DefaultLogMaxSize, "The maximum size of log files before they are rotated, in megabytes.")
-	logMaxBackups   = flag.Int("logmaxbackups", DefaultLogMaxBackups, "The maximum number of old log files to keep.")
-	logMaxAge       = flag.Int("logmaxage", DefaultLogMaxAge, "The maximum number of days to retain old log files, in days.")
+	logFileLocation = flag.String("logfile", l.DefaultLogFileLocation, "Log file. By default, log messages will be printed to stdout.")
+	logMaxSize      = flag.Int("logmaxsize", l.DefaultLogMaxSize, "The maximum size of log files before they are rotated, in megabytes.")
+	logMaxBackups   = flag.Int("logmaxbackups", l.DefaultLogMaxBackups, "The maximum number of old log files to keep.")
+	logMaxAge       = flag.Int("logmaxage", l.DefaultLogMaxAge, "The maximum number of days to retain old log files, in days.")
 	logLevel        = flag.String("loglevel", "warn", "The maximum log level which will be logged. error < warn < info < debug < trace. For example, trace will log everything, info will log info, warn, and error.")
 
 	tokenStore = tokenstore.NewTokenStore()
-
-	LogMessageLevel loglevel.LogLevel
 )
 
 func init() {
@@ -90,7 +75,7 @@ func init() {
 		})
 
 		fmt.Fprintln(os.Stderr, "If a certificate file is provided, Tyro will attempt to use HTTPS.")
-		fmt.Fprintln(os.Stderr, "The Access-Control-Allow-Origin header for CORS is only set for the /status/[bibID] endpoint.")
+		fmt.Fprintln(os.Stderr, "The Access-Control-Allow-Origin header for CORS is only set for the /status/bib/[bibID] and /status/item/[itemID] endpoints.")
 	}
 }
 
@@ -98,11 +83,11 @@ func main() {
 
 	flag.Parse()
 
-	LogMessageLevel = loglevel.ParseLogLevel(*logLevel)
+	l.Set(l.ParseLogLevel(*logLevel))
 
 	overrideUnsetFlagsFromEnvironmentVariables()
 
-	if *logFileLocation != DefaultLogFileLocation {
+	if *logFileLocation != l.DefaultLogFileLocation {
 		log.SetOutput(&lumberjack.Logger{
 			Filename:   *logFileLocation,
 			MaxSize:    *logMaxSize,
@@ -113,13 +98,13 @@ func main() {
 		log.SetOutput(os.Stdout)
 	}
 
-	logM("Starting Tyro", loglevel.InfoMessage)
-	logM("Serving on address: "+*address, loglevel.InfoMessage)
-	logM("Using Client Key: "+*clientKey, loglevel.InfoMessage)
-	logM("Using Client Secret: "+*clientSecret, loglevel.InfoMessage)
-	logM("Connecting to API URL: "+*apiURL, loglevel.InfoMessage)
-	logM("Using ACAO header: "+*headerACAO, loglevel.InfoMessage)
-	logM(fmt.Sprintf("Allowing access to raw Sierra API: %v", *raw), loglevel.InfoMessage)
+	l.Log("Starting Tyro", l.InfoMessage)
+	l.Log("Serving on address: "+*address, l.InfoMessage)
+	l.Log("Using Client Key: "+*clientKey, l.InfoMessage)
+	l.Log("Using Client Secret: "+*clientSecret, l.InfoMessage)
+	l.Log("Connecting to API URL: "+*apiURL, l.InfoMessage)
+	l.Log("Using ACAO header: "+*headerACAO, l.InfoMessage)
+	l.Log(fmt.Sprintf("Allowing access to raw Sierra API: %v", *raw), l.InfoMessage)
 
 	if *clientKey == "" {
 		log.Fatal("FATAL: A client key is required to authenticate against the Sierra API.")
@@ -128,31 +113,28 @@ func main() {
 	}
 
 	if *headerACAO == "*" {
-		logM("Using \"*\" for \"Access-Control-Allow-Origin\" header. API will be public!", loglevel.WarnMessage)
+		l.Log("Using \"*\" for \"Access-Control-Allow-Origin\" header. API will be public!", l.WarnMessage)
 	}
 
 	if *certFile != "" {
-		logM("Going to try to serve through HTTPS", loglevel.InfoMessage)
-		logM("Using Certificate File: "+*certFile, loglevel.InfoMessage)
-		logM("Using Private Key File: "+*keyFile, loglevel.InfoMessage)
+		l.Log("Going to try to serve through HTTPS", l.InfoMessage)
+		l.Log("Using Certificate File: "+*certFile, l.InfoMessage)
+		l.Log("Using Private Key File: "+*keyFile, l.InfoMessage)
 	}
 
-	parsedURL, err := parseURLandEndpoint(*apiURL, TokenRequestEndpoint)
+	parsedURL, err := parseURLandJoinToPath(*apiURL, sierraapi.TokenRequestEndpoint)
 	if err != nil {
 		log.Fatal("FATAL: Unable to parse API URL.")
 	}
 
-	go func() {
-		for m := range tokenStore.LogMessages {
-			logM(m.Message, m.Level)
-		}
-	}()
 	tokenStore.Refresher(parsedURL.String(), *clientKey, *clientSecret)
 
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/status/", statusHandler)
+	http.HandleFunc("/status/item/", statusItemHandler)
+	http.HandleFunc("/status/bib/", statusBibHandler)
 	if *raw {
-		logM("Allowing access to raw Sierra API.", loglevel.WarnMessage)
+		l.Log("Allowing access to raw Sierra API.", l.WarnMessage)
 		rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})
 		rawProxy.Director = rawRewriter
 		http.Handle("/raw/", rawProxy)
@@ -170,57 +152,104 @@ func main() {
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-
 	w.Header().Set("Content-Type", "text/html")
-
 	if r.URL.Path != "/" {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprint(w, "<html><head></head><body><pre>404 - Not Found</pre></body></html>")
+		l.Log("404 Handler visited.", l.TraceMessage)
 		return
 	}
-
+	l.Log("Home Handler visited.", l.TraceMessage)
 	fmt.Fprint(w, "<html><head></head><body><h1>Welcome to Tyro! The Sierra API helper.</h1></body></html>")
-
 }
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusBadRequest)
+	l.Log("Bare Status Handler visited.", l.TraceMessage)
+	fmt.Fprint(w, "<html><head></head><body><pre>Available endpoints: /status/bib/[bibID] and /status/item/[itemID]</pre></body></html>")
+}
 
-	token, err := tokenStore.Get()
+func statusItemHandler(w http.ResponseWriter, r *http.Request) {
+
+	token, err := getTokenOrError(w, r)
 	if err != nil {
-		http.Error(w, "Token Error.", http.StatusInternalServerError)
-		logM("Internal Server Error at /status/ handler, token error.", loglevel.DebugMessage)
-		return
-	}
-	if token == tokenstore.UninitialedTokenValue {
-		logM("Waiting for token to initialize...", loglevel.TraceMessage)
-		select {
-		case <-tokenStore.Initialized:
-			tokenStore.Initialized <- struct{}{}
-			token, err = tokenStore.Get()
-			if err != nil {
-				http.Error(w, "Token Error.", http.StatusInternalServerError)
-				logM("Internal Server Error at /status/ handler, token error.", loglevel.DebugMessage)
-				return
-			}
-		case <-time.After(time.Second * 30):
-			http.Error(w, "Token Error.", http.StatusInternalServerError)
-			logM("Internal Server Error at /status/ handler, token error.", loglevel.DebugMessage)
-			return
-		}
-	}
-
-	bibID := strings.Split(r.URL.Path[len("/status/"):], "/")[0]
-
-	if bibID == "" {
-		http.Error(w, "Error, you need to provide a Bib ID. /status/[BidID]", http.StatusBadRequest)
-		logM("Bad Request at /status/ handler, no BidID provided.", loglevel.TraceMessage)
+		l.Log(err, l.ErrorMessage)
 		return
 	}
 
-	parsedAPIURL, err := parseURLandEndpoint(*apiURL, ItemRequestEndpoint)
+	itemID := strings.Split(r.URL.Path[len("/status/item/"):], "/")[0]
+	if itemID == "" {
+		http.Error(w, "Error, you need to provide an ItemID. /status/item/[ItemID]", http.StatusBadRequest)
+		l.Log("Bad Request at /status/item/ handler, no ItemID provided.", l.TraceMessage)
+		return
+	}
+
+	parsedAPIURL, err := parseURLandJoinToPath(*apiURL, sierraapi.ItemRequestEndpoint, itemID)
 	if err != nil {
 		http.Error(w, "Server Error.", http.StatusInternalServerError)
-		logM("Internal Server Error at /status/ handler, unable to parse url.", loglevel.DebugMessage)
+		l.Log("Internal Server Error at /status/item/ handler, unable to parse url.", l.DebugMessage)
+		return
+	}
+
+	resp, err := sierraapi.SendRequestToAPI(parsedAPIURL.String(), token, w, r)
+	if err != nil {
+		l.Log(fmt.Sprintf("Internal Server Error at /status/item/, %v", err), l.ErrorMessage)
+		return
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
+		tokenStore.Refresh <- struct{}{}
+		l.Log("Token is out of date.", l.ErrorMessage)
+		return
+	}
+
+	var responseJSON sierraapi.ItemRecordIn
+
+	err = json.NewDecoder(resp.Body).Decode(&responseJSON)
+	defer resp.Body.Close()
+	if err != nil {
+		http.Error(w, "JSON Decoding Error", http.StatusInternalServerError)
+		l.Log(fmt.Sprintf("Internal Server Error at /status/item/ handler, JSON Decoding Error: %v", err), l.WarnMessage)
+		return
+	}
+
+	finalJSON, err := json.Marshal(responseJSON.Convert())
+	if err != nil {
+		http.Error(w, "JSON Encoding Error", http.StatusInternalServerError)
+		l.Log(fmt.Sprintf("Internal Server Error at /status/item/ handler, JSON Encoding Error: %v", err), l.WarnMessage)
+		return
+	}
+
+	setACAOHeader(w, r, *headerACAO)
+
+	l.Log(fmt.Sprintf("Sending response at /status/item handler: %v", responseJSON.Convert()), l.TraceMessage)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(finalJSON)
+
+}
+
+func statusBibHandler(w http.ResponseWriter, r *http.Request) {
+
+	token, err := getTokenOrError(w, r)
+	if err != nil {
+		l.Log(err, l.ErrorMessage)
+		return
+	}
+
+	bibID := strings.Split(r.URL.Path[len("/status/bib/"):], "/")[0]
+
+	if bibID == "" {
+		http.Error(w, "Error, you need to provide a BibID. /status/bib/[BidID]", http.StatusBadRequest)
+		l.Log("Bad Request at /status/bib/ handler, no BidID provided.", l.TraceMessage)
+		return
+	}
+
+	parsedAPIURL, err := parseURLandJoinToPath(*apiURL, sierraapi.ItemRequestEndpoint)
+	if err != nil {
+		http.Error(w, "Server Error.", http.StatusInternalServerError)
+		l.Log("Internal Server Error at /status/bib/ handler, unable to parse url.", l.DebugMessage)
 		return
 	}
 
@@ -229,98 +258,41 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	q.Set("deleted", "false")
 	parsedAPIURL.RawQuery = q.Encode()
 
-	getItemStatus, err := http.NewRequest("GET", parsedAPIURL.String(), nil)
+	resp, err := sierraapi.SendRequestToAPI(parsedAPIURL.String(), token, w, r)
 	if err != nil {
-		http.Error(w, "Request failed.", http.StatusInternalServerError)
-		logM("Internal Server Error at /status/ handler, request failed.", loglevel.DebugMessage)
+		l.Log(fmt.Sprintf("Internal Server Error at /status/bib/, %v", err), l.ErrorMessage)
 		return
 	}
-
-	setAuthorizationHeaders(getItemStatus, r, token)
-
-	client := &http.Client{}
-	resp, err := client.Do(getItemStatus)
-	if err != nil {
-		http.Error(w, "Error querying Sierra API", http.StatusInternalServerError)
-		logM(fmt.Sprintf("Internal Server Error at /status/ handler, GET against itemStatusURL failed: %v", err), loglevel.WarnMessage)
-		return
-	}
-
 	if resp.StatusCode == http.StatusUnauthorized {
 		http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
-		logM("Internal Server Error at /status/ handler, token is out of date:", loglevel.WarnMessage)
 		tokenStore.Refresh <- struct{}{}
+		l.Log("Token is out of date.", l.ErrorMessage)
 		return
 	}
 
-	var responseJSON struct {
-		Entries []struct {
-			CallNumber string `json:"callNumber"`
-			Status     struct {
-				DueDate time.Time `json:"duedate"`
-			} `json:"status"`
-			Location struct {
-				Name string `json:"name"`
-			} `json:"location"`
-		} `json:"entries"`
-	}
+	var responseJSON sierraapi.ItemRecordsIn
 
 	err = json.NewDecoder(resp.Body).Decode(&responseJSON)
 	defer resp.Body.Close()
 	if err != nil {
 		http.Error(w, "JSON Decoding Error", http.StatusInternalServerError)
-		logM(fmt.Sprintf("Internal Server Error at /status/ handler, JSON Decoding Error: %v", err), loglevel.WarnMessage)
+		l.Log(fmt.Sprintf("Internal Server Error at /status/bib/ handler, JSON Decoding Error: %v", err), l.WarnMessage)
 		return
 	}
 
-	type Entry struct {
-		CallNumber string
-		Status     string
-		Location   string
-	}
-
-	var statusJSON struct {
-		Entries []Entry
-	}
-
-	for _, responseEntry := range responseJSON.Entries {
-		newEntry := Entry{}
-		newEntry.CallNumber = responseEntry.CallNumber
-		newEntry.CallNumber = strings.Replace(newEntry.CallNumber, "|a", " ", -1)
-		newEntry.CallNumber = strings.Replace(newEntry.CallNumber, "|b", " ", -1)
-		if responseEntry.Status.DueDate.IsZero() {
-			newEntry.Status = "IN LIBRARY"
-		} else {
-			newEntry.Status = "DUE " + responseEntry.Status.DueDate.Format("January 2, 2006")
-		}
-		newEntry.Location = responseEntry.Location.Name
-
-		statusJSON.Entries = append(statusJSON.Entries, newEntry)
-	}
-
-	finaljson, err := json.Marshal(statusJSON)
+	finalJSON, err := json.Marshal(responseJSON.Convert())
 	if err != nil {
 		http.Error(w, "JSON Encoding Error", http.StatusInternalServerError)
-		logM(fmt.Sprintf("Internal Server Error at /status/ handler, JSON Encoding Error: %v", err), loglevel.WarnMessage)
+		l.Log(fmt.Sprintf("Internal Server Error at /status/bib/ handler, JSON Encoding Error: %v", err), l.WarnMessage)
 		return
 	}
 
-	if *headerACAO == "*" {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-	} else if *headerACAO != "" {
-		possibleOrigins := strings.Split(*headerACAO, ";")
-		for _, okOrigin := range possibleOrigins {
-			okOrigin = strings.TrimSpace(okOrigin)
-			if (okOrigin != "") && (okOrigin == r.Header.Get("Origin")) {
-				w.Header().Set("Access-Control-Allow-Origin", okOrigin)
-			}
-		}
-	}
+	setACAOHeader(w, r, *headerACAO)
 
-	logM(fmt.Sprintf("Sending response at /status/ handler: %v", statusJSON), loglevel.TraceMessage)
+	l.Log(fmt.Sprintf("Sending response at /status/bib/ handler: %v", responseJSON.Convert()), l.TraceMessage)
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(finaljson)
+	w.Write(finalJSON)
 
 }
 
@@ -328,10 +300,10 @@ func rawRewriter(r *http.Request) {
 
 	token, err := tokenStore.Get()
 	if err != nil {
-		logM("Error at /raw/ handler, token not yet generated.", loglevel.DebugMessage)
+		l.Log("Error at /raw/ handler, token not yet generated.", l.DebugMessage)
 	}
 
-	parsedAPIURL, err := parseURLandEndpoint(*apiURL, r.URL.Path[len("/raw/"):])
+	parsedAPIURL, err := parseURLandJoinToPath(*apiURL, r.URL.Path[len("/raw/"):])
 	if err != nil {
 		log.Fatalf("FATAL: %v", err)
 	}
@@ -340,9 +312,12 @@ func rawRewriter(r *http.Request) {
 
 	r.URL = parsedAPIURL
 
-	setAuthorizationHeaders(r, r, token)
+	err = sierraapi.SetAuthorizationHeaders(r, r, token)
+	if err != nil {
+		l.Log("The remote address in an incoming request is not set properly", l.DebugMessage)
+	}
 
-	logM(fmt.Sprintf("Sending proxied request: %v", r), loglevel.TraceMessage)
+	l.Log(fmt.Sprintf("Sending proxied request: %v", r), l.TraceMessage)
 
 }
 
@@ -367,39 +342,53 @@ func overrideUnsetFlagsFromEnvironmentVariables() {
 	}
 }
 
-//Log a message if the level is below or equal to the set LogMessageLevel
-func logM(message interface{}, messagelevel loglevel.LogLevel) {
-	if messagelevel <= LogMessageLevel {
-		log.Printf("%v: %v\n", messagelevel.String(), message)
-	}
-}
-
-func parseURLandEndpoint(URL, endpoint string) (*url.URL, error) {
+func parseURLandJoinToPath(URL string, toJoin ...string) (*url.URL, error) {
 	parsedURL, err := url.Parse(URL)
 	if err != nil {
 		return new(url.URL), errors.New("Unable to parse URL.")
 	}
-	parsedURL.Path = path.Join(parsedURL.Path, endpoint)
+	for _, element := range toJoin {
+		parsedURL.Path = path.Join(parsedURL.Path, element)
+	}
 	return parsedURL, nil
 }
 
-//Set the required Authorization headers.
-//This includes the Bearer token, User-Agent, and X-Forwarded-For
-//I'd rather this be a function on http.Request types, but Go
-//forbids that without embedding in a new type.
-func setAuthorizationHeaders(nr, or *http.Request, t string) {
-	nr.Header.Add("Authorization", "Bearer "+t)
-	nr.Header.Add("User-Agent", "Tyro")
+func getTokenOrError(w http.ResponseWriter, r *http.Request) (string, error) {
 
-	originalForwardFor := or.Header.Get("X-Forwarded-For")
-	if originalForwardFor == "" {
-		ip, _, err := net.SplitHostPort(or.RemoteAddr)
-		if err != nil {
-			logM("The remote address in an incoming request is not set properly", loglevel.TraceMessage)
-		} else {
-			nr.Header.Add("X-Forwarded-For", ip)
+	token, err := tokenStore.Get()
+	if err != nil {
+		http.Error(w, "Token Error.", http.StatusInternalServerError)
+		return token, err
+	}
+	if token == tokenstore.UninitialedTokenValue {
+		l.Log("Waiting for token to initialize...", l.TraceMessage)
+		select {
+		case <-tokenStore.Initialized:
+			tokenStore.Initialized <- struct{}{}
+			token, err = tokenStore.Get()
+			if err != nil {
+				http.Error(w, "Token Error.", http.StatusInternalServerError)
+				return token, err
+			}
+		case <-time.After(time.Second * 30):
+			http.Error(w, "Token Error.", http.StatusInternalServerError)
+			return token, errors.New("Unable to get token from TokenStore")
 		}
-	} else {
-		nr.Header.Add("X-Forwarded-For", originalForwardFor)
+	}
+
+	return token, err
+}
+
+func setACAOHeader(w http.ResponseWriter, r *http.Request, headerConfig string) {
+	if headerConfig == "*" {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	} else if headerConfig != "" {
+		possibleOrigins := strings.Split(headerConfig, ";")
+		for _, okOrigin := range possibleOrigins {
+			okOrigin = strings.TrimSpace(okOrigin)
+			if (okOrigin != "") && (okOrigin == r.Header.Get("Origin")) {
+				w.Header().Set("Access-Control-Allow-Origin", okOrigin)
+			}
+		}
 	}
 }

@@ -146,12 +146,6 @@ func TestTokenRefreshFailShortTTL(t *testing.T) {
 	defer ts.Close()
 
 	tok := NewTokenStore()
-	go func() {
-		for m := range tok.LogMessages {
-			t.Log(m)
-		}
-	}()
-
 	_, err := tok.refresh(ts.URL, "", "")
 	if err == nil {
 		t.Error("Token refresh() should not have worked with really small TTL.")
@@ -179,12 +173,8 @@ func TestRefresherTimeout(t *testing.T) {
 	defer ts.Close()
 
 	tok := NewTokenStore()
+
 	tok.Refresher(ts.URL, "", "")
-	go func() {
-		for m := range tok.LogMessages {
-			t.Log(m)
-		}
-	}()
 	defer close(tok.Refresh)
 
 	token, err := tok.Get()
@@ -235,11 +225,6 @@ func TestRefresherRequestNew(t *testing.T) {
 
 	tok := NewTokenStore()
 	tok.Refresher(ts.URL, "", "")
-	go func() {
-		for m := range tok.LogMessages {
-			t.Log(m)
-		}
-	}()
 	defer close(tok.Refresh)
 
 	<-tok.Initialized
@@ -283,11 +268,6 @@ func TestRefresherRequestError(t *testing.T) {
 	defer ts.Close()
 
 	tok := NewTokenStore()
-	go func() {
-		for m := range tok.LogMessages {
-			t.Log(m)
-		}
-	}()
 	tok.Refresher(ts.URL, "", "")
 	defer close(tok.Refresh)
 

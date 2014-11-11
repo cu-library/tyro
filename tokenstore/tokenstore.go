@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/cudevmaxwell/tyro/loglevel"
+	l "github.com/cudevmaxwell/tyro/loglevel"
 	"net/http"
 	"net/url"
 	"sync"
@@ -37,23 +37,16 @@ const MinimumTokenTTL int = 10
 //token
 const DefaultRefreshTime int = 30
 
-type LogMessage struct {
-	Message interface{}
-	Level   loglevel.LogLevel
-}
-
 type TokenStore struct {
 	Lock        sync.RWMutex
 	Value       string
 	Refresh     chan struct{}
-	LogMessages chan LogMessage
 	Initialized chan struct{}
 }
 
 func NewTokenStore() *TokenStore {
 	t := new(TokenStore)
 	t.Refresh = make(chan struct{})
-	t.LogMessages = make(chan LogMessage, 100)
 	t.Initialized = make(chan struct{}, 1)
 	t.Value = UninitialedTokenValue
 
@@ -66,6 +59,7 @@ func (t *TokenStore) Get() (string, error) {
 	if t.Value == "" {
 		return "", errors.New("Token generation error.")
 	}
+	l.Log("Sending token.", l.TraceMessage)
 	return t.Value, nil
 }
 
@@ -86,26 +80,28 @@ func (t *TokenStore) Refresher(tokenURL, clientKey, clientSecret string) {
 	runRefreshSetUpNext := func() <-chan time.Time {
 		refreshIn, err := t.refresh(tokenURL, clientKey, clientSecret)
 		if err != nil {
-			t.LogMessages <- LogMessage{err, loglevel.ErrorMessage}
+			l.Log(err, l.ErrorMessage)
 			refreshIn = DefaultRefreshTime
 		}
 		futureTime := refreshIn - TokenRefreshBuffer
+		if futureTime < TokenRefreshBuffer {
+			futureTime = TokenRefreshBuffer
+		}
 		lm := fmt.Sprintf("%v seconds in the future, a refresh will happen.", futureTime)
-		t.LogMessages <- LogMessage{lm, loglevel.TraceMessage}
-		return time.After(time.Duration(refreshIn-TokenRefreshBuffer) * time.Second)
+		l.Log(lm, l.TraceMessage)
+		return time.After(time.Duration(futureTime) * time.Second)
 	}
 
 	refreshOrTimeout := func(timeout <-chan time.Time) (<-chan time.Time, error) {
 		select {
 		case <-timeout:
-			t.LogMessages <- LogMessage{"The old token timed out.", loglevel.TraceMessage}
+			l.Log("The old token timed out.", l.TraceMessage)
 			return runRefreshSetUpNext(), nil
 		case _, ok := <-t.Refresh:
 			if ok {
-				t.LogMessages <- LogMessage{"A new token has been requested", loglevel.TraceMessage}
+				l.Log("A new token has been requested", l.TraceMessage)
 				return runRefreshSetUpNext(), nil
 			} else {
-				close(t.LogMessages)
 				return make(<-chan time.Time), errors.New("Refresh channel is closed.")
 			}
 		}
@@ -137,7 +133,7 @@ func (t *TokenStore) refresh(tokenURL, clientKey, clientSecret string) (int, err
 	getTokenRequest, err := http.NewRequest("POST", tokenURL, bytes.NewBufferString(bodyValues.Encode()))
 	if err != nil {
 		t.set("")
-		t.LogMessages <- LogMessage{err, loglevel.WarnMessage}
+		l.Log(err, l.WarnMessage)
 		return 0, err
 	}
 	getTokenRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
@@ -146,12 +142,12 @@ func (t *TokenStore) refresh(tokenURL, clientKey, clientSecret string) (int, err
 	resp, err := client.Do(getTokenRequest)
 	if err != nil {
 		t.set("")
-		t.LogMessages <- LogMessage{err, loglevel.WarnMessage}
+		l.Log(err, l.WarnMessage)
 		return 0, err
 	}
 	if resp.StatusCode != 200 {
 		t.set("")
-		t.LogMessages <- LogMessage{err, loglevel.WarnMessage}
+		l.Log(err, l.WarnMessage)
 		return 0, fmt.Errorf("Unable to authenticate to token generator, %v", resp.StatusCode)
 	}
 
@@ -162,7 +158,7 @@ func (t *TokenStore) refresh(tokenURL, clientKey, clientSecret string) (int, err
 
 	if err != nil {
 		t.set("")
-		t.LogMessages <- LogMessage{err, loglevel.WarnMessage}
+		l.Log(err, l.WarnMessage)
 		return 0, err
 	}
 
@@ -170,7 +166,7 @@ func (t *TokenStore) refresh(tokenURL, clientKey, clientSecret string) (int, err
 		t.set("")
 		return 0, errors.New("Token has a expire_in that is too small.")
 	} else {
-		t.LogMessages <- LogMessage{"Received Token", loglevel.TraceMessage}
+		l.Log("Received Token", l.TraceMessage)
 		t.set(responseJSON.AccessToken)
 		return responseJSON.ExpiresIn, nil
 	}

@@ -20,7 +20,7 @@ These options are optional:
     -address= : The address to serve on, passed to ListenAndServe, doc here: http://golang.org/pkg/net/http/#ListenAndServe. Defaults to ":8877". 
     -raw : If supplied, this flag will turn on access to the raw Sierra API under /raw/. 
     -acaoheader= : The origin to place in the Access-Control-Allow-Origin header.
-                   Defaults to *. Is only used for the /status/[bidID] endpoint. 
+                   Defaults to *. Is only used for the /status/bib/[bibID] and /status/item/[itemID] endpoints. 
                    Multiple origins can be supplied, delimit with the ; character. 
                    Examples: 
                    -acaoheader="http://localhost:8000" 
@@ -48,7 +48,7 @@ Log rolling is provided by [lumberjack](http://github.com/natefinch/lumberjack).
 Tyro provides the following URLs (endpoints?, routes?)
 
     / : Home page, HTML
-    /status/[bibID] : Status JSON, returns a JSON doc like:
+    /status/bib/[bibID] : Status JSON, returns a JSON doc like:
         {
           Entries: [
             {

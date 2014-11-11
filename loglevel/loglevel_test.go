@@ -5,6 +5,8 @@
 package loglevel
 
 import (
+	"bytes"
+	"log"
 	"strings"
 	"testing"
 )
@@ -45,6 +47,39 @@ func TestLogLevelParse(t *testing.T) {
 
 	if level := ParseLogLevel("blahblahblah"); level != TraceMessage {
 		t.Error("Default case for string to log level broken.")
+	}
+
+}
+
+func TestLogLevel(t *testing.T) {
+
+	logLevelToExpectedLength := map[LogLevel]int{
+		ErrorMessage: 2,
+		WarnMessage:  3,
+		InfoMessage:  4,
+		DebugMessage: 5,
+		TraceMessage: 6,
+	} //One more than expected, because of empty string at end of Split()
+
+	logLevels := []LogLevel{
+		ErrorMessage,
+		WarnMessage,
+		InfoMessage,
+		DebugMessage,
+		TraceMessage,
+	}
+
+	for _, level := range logLevels {
+		b := new(bytes.Buffer)
+		Set(level)
+		for _, messageLevel := range logLevels {
+			log.SetOutput(b)
+			Log("x", messageLevel)
+		}
+		if len(strings.Split(b.String(), "\n")) != logLevelToExpectedLength[level] {
+			t.Logf("%#v", strings.Split(b.String(), "\n"))
+			t.Errorf("The log level %v logged the wrong number of messages.", level)
+		}
 	}
 
 }

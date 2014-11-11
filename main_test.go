@@ -5,15 +5,13 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/cudevmaxwell/tyro/loglevel"
+	l "github.com/cudevmaxwell/tyro/loglevel"
 	"github.com/cudevmaxwell/tyro/tokenstore"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 )
 
@@ -51,20 +49,9 @@ func TestHomeHandler404(t *testing.T) {
 	}
 }
 
-func TestStatusHandlerNoBibId(t *testing.T) {
+func TestStatusHandler(t *testing.T) {
 
 	setupLogging()
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
-	}))
-	defer ts.Close()
-
-	tokenStore = tokenstore.NewTokenStore()
-	tokenStore.Refresher(ts.URL, "", "")
-	go func() {
-		for _ = range tokenStore.LogMessages {
-		}
-	}()
 
 	req, err := http.NewRequest("GET", "/status/", nil)
 	if err != nil {
@@ -75,16 +62,39 @@ func TestStatusHandlerNoBibId(t *testing.T) {
 	statusHandler(w, req)
 
 	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status handler didn't return %v.", http.StatusBadRequest)
+	}
+}
+
+func TestStatusBibHandlerNoBibId(t *testing.T) {
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"access_token":"test","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer ts.Close()
+
+	tokenStore = tokenstore.NewTokenStore()
+	tokenStore.Refresher(ts.URL, "", "")
+
+	req, err := http.NewRequest("GET", "/status/bib/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	statusBibHandler(w, req)
+
+	if w.Code != http.StatusBadRequest {
 		t.Errorf("Status handler didn't error %v when no bib id provided", http.StatusBadRequest)
 	}
 
-	if w.Body.String() != "Error, you need to provide a Bib ID. /status/[BidID]\n" {
+	if w.Body.String() != "Error, you need to provide a BibID. /status/bib/[BidID]\n" {
 		t.Error("Status handler didn't return the correct information when no bib id provided")
 	}
 
 }
 
-func TestStatusHandlerGoodResponseFromSierra(t *testing.T) {
+func TestStatusBibHandlerGoodResponseFromSierra(t *testing.T) {
 
 	setupLogging()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -94,28 +104,24 @@ func TestStatusHandlerGoodResponseFromSierra(t *testing.T) {
 
 	tokenStore = tokenstore.NewTokenStore()
 	tokenStore.Refresher(ts.URL, "", "")
-	go func() {
-		for _ = range tokenStore.LogMessages {
-		}
-	}()
 
 	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, `{"entries":[{"id":2536252,"updatedDate":"2014-09-19T03:09:16Z","createdDate":"2007-05-11T18:37:00Z","deleted":false,"bibIds":[2401597],"location":{"code":"flr4 ","name":"Floor 4 Books"},"status":{"code":"-","display":"IN LIBRARY"},"barcode":"12016135026","callNumber":"|aJC578.R383|bG67 2007"}]}`)
 	}))
 	defer ts2.Close()
 
-	//Get StatusHandler to look at our mocked server
+	//Get statusBibIDHandler to look at our mocked server
 	oldAPIURL := *apiURL
 	*apiURL = ts2.URL
 	defer func() { *apiURL = oldAPIURL }()
 
-	req, err := http.NewRequest("GET", "/status/2401597", nil)
+	req, err := http.NewRequest("GET", "/status/bib/2401597", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	w := httptest.NewRecorder()
-	statusHandler(w, req)
+	statusBibHandler(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Status handler didn't return %v when provided with a good response.", http.StatusBadRequest)
@@ -133,10 +139,6 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 
 	tokenStore = tokenstore.NewTokenStore()
 	tokenStore.Refresher(ts.URL, "", "")
-	go func() {
-		for _ = range tokenStore.LogMessages {
-		}
-	}()
 
 	req, err := http.NewRequest("GET", "/raw/?bibIds=1234", nil)
 	if err != nil {
@@ -155,40 +157,7 @@ func TestRawHandlerTestRewrite(t *testing.T) {
 
 }
 
-func TestLoggingLevels(t *testing.T) {
-
-	logLevelToExpectedLength := map[loglevel.LogLevel]int{
-		loglevel.ErrorMessage: 2,
-		loglevel.WarnMessage:  3,
-		loglevel.InfoMessage:  4,
-		loglevel.DebugMessage: 5,
-		loglevel.TraceMessage: 6,
-	} //One more than expected, because of empty string at end of Split()
-
-	logLevels := []loglevel.LogLevel{
-		loglevel.ErrorMessage,
-		loglevel.WarnMessage,
-		loglevel.InfoMessage,
-		loglevel.DebugMessage,
-		loglevel.TraceMessage,
-	}
-
-	for _, level := range logLevels {
-		b := new(bytes.Buffer)
-		LogMessageLevel = level
-		for _, messageLevel := range logLevels {
-			log.SetOutput(b)
-			logM("x", messageLevel)
-		}
-		if len(strings.Split(b.String(), "\n")) != logLevelToExpectedLength[level] {
-			t.Logf("%#v", strings.Split(b.String(), "\n"))
-			t.Errorf("The log level %v logged the wrong number of messages.", level)
-		}
-	}
-
-}
-
-func TestParseURLandEndpoint(t *testing.T) {
+func TestParseURLandJoinToPath(t *testing.T) {
 
 	setupLogging()
 
@@ -196,7 +165,7 @@ func TestParseURLandEndpoint(t *testing.T) {
 	endpoint := "test"
 	badURL := ":"
 
-	parsedURL, err := parseURLandEndpoint(goodURL, endpoint)
+	parsedURL, err := parseURLandJoinToPath(goodURL, endpoint)
 	if err != nil {
 		t.Error("The parse should not have failed.")
 	}
@@ -204,62 +173,95 @@ func TestParseURLandEndpoint(t *testing.T) {
 		t.Error("Bad join")
 	}
 
-	parsedURL, err = parseURLandEndpoint(badURL, endpoint)
+	parsedURL, err = parseURLandJoinToPath(badURL, endpoint)
 	if err == nil {
 		t.Error("Parse should have failed")
 	}
 
 }
 
-func TestSettingAuthorizationHeaders(t *testing.T) {
-
-	setupLogging()
-
-	//The default case
-
-	oldRequest, _ := http.NewRequest("GET", "/test", nil)
-	oldRequest.RemoteAddr = "7.7.7.7:8888"
-	newRequest, _ := http.NewRequest("GET", "/test", nil)
-
-	setAuthorizationHeaders(newRequest, oldRequest, "token")
-
-	if newRequest.Header.Get("Authorization") != "Bearer token" {
-		t.Error("The Authorization header is not being set properly.")
+//The default case. Don't set the header at all.
+func TestSetACAOHeaderNoConfig(t *testing.T) {
+	r, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if newRequest.Header.Get("User-Agent") != "Tyro" {
-		t.Error("The User-Agent header is not being set properly.")
+	w := httptest.NewRecorder()
+	setACAOHeader(w, r, "")
+	if w.HeaderMap.Get("Access-Control-Allow-Origin") != "" {
+		t.Error("Access-Control-Allow-Origin shouldn't be set.")
 	}
-	if newRequest.Header.Get("X-Forwarded-For") != "7.7.7.7" {
-		t.Error("The X-Forwarded-For header is not being set properly.")
+}
+
+//Set the header to *.
+func TestSetACAOHeaderAllOrigins(t *testing.T) {
+	r, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	//Badly formed remoteaddr
-
-	oldRequest, _ = http.NewRequest("GET", "/test", nil)
-	oldRequest.RemoteAddr = ":wef:wf:"
-	newRequest, _ = http.NewRequest("GET", "/test", nil)
-
-	setAuthorizationHeaders(newRequest, oldRequest, "token")
-
-	if newRequest.Header.Get("X-Forwarded-For") != "" {
-		t.Error("The X-Forwarded-For header is being set when it shouldn't be.")
+	w := httptest.NewRecorder()
+	setACAOHeader(w, r, "*")
+	if w.HeaderMap.Get("Access-Control-Allow-Origin") != "*" {
+		t.Error("Access-Control-Allow-Origin not set properly.")
 	}
+}
 
-	//An X-Forwarded-For in the incoming request
-
-	oldRequest, _ = http.NewRequest("GET", "/test", nil)
-	oldRequest.Header.Add("X-Forwarded-For", "1.2.3.4")
-	newRequest, _ = http.NewRequest("GET", "/test", nil)
-
-	setAuthorizationHeaders(newRequest, oldRequest, "token")
-
-	if newRequest.Header.Get("X-Forwarded-For") != "1.2.3.4" {
-		t.Error("The X-Forwarded-For header is not being set properly.")
+//Set the ACAO config to a single origin which doesn't match.
+func TestSetACAOHeaderNotMatchOnSingle(t *testing.T) {
+	r, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	w := httptest.NewRecorder()
+	setACAOHeader(w, r, "http://test.com")
+	if w.HeaderMap.Get("Access-Control-Allow-Origin") != "" {
+		t.Error("Access-Control-Allow-Origin shouldn't be set.")
+	}
+}
 
+//Set the ACAO config to a single origin which does match.
+func TestSetACAOHeaderMatchOnSingle(t *testing.T) {
+	r, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Header.Set("Origin", "http://test.com")
+	w := httptest.NewRecorder()
+	setACAOHeader(w, r, "http://test.com")
+	if w.HeaderMap.Get("Access-Control-Allow-Origin") != "http://test.com" {
+		t.Error("Access-Control-Allow-Origin not set properly.")
+	}
+}
+
+//Set the ACAO config to a one of a list of origins, none of which match.
+func TestSetACAOHeaderNoMatchOnList(t *testing.T) {
+	r, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Header.Set("Origin", "http://test3.com")
+	w := httptest.NewRecorder()
+	setACAOHeader(w, r, "http://test.com;http://test2.com;")
+	if w.HeaderMap.Get("Access-Control-Allow-Origin") != "" {
+		t.Error("Access-Control-Allow-Origin shouldn't be set.")
+	}
+}
+
+//Set the ACAO config to a one of a list of origins, one of which does match.
+func TestSetACAOHeaderMatchOnList(t *testing.T) {
+	r, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Header.Set("Origin", "http://test2.com")
+	w := httptest.NewRecorder()
+	setACAOHeader(w, r, "http://test.com;http://test2.com;")
+	if w.HeaderMap.Get("Access-Control-Allow-Origin") != "http://test2.com" {
+		t.Error("Access-Control-Allow-Origin not set properly.")
+	}
 }
 
 func setupLogging() {
-	LogMessageLevel = loglevel.ErrorMessage
+	l.Set(l.ErrorMessage)
 	log.SetOutput(os.Stderr)
 }

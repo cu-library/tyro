@@ -1,14 +1,45 @@
 package loglevel
 
+import (
+	"log"
+	"sync"
+)
+
 type LogLevel int
 
 const (
+	//Logging
+	DefaultLogFileLocation string = "stdout"
+	DefaultLogMaxSize      int    = 100
+	DefaultLogMaxBackups   int    = 0
+	DefaultLogMaxAge       int    = 0
+
 	ErrorMessage LogLevel = iota
 	WarnMessage
 	InfoMessage
 	DebugMessage
 	TraceMessage
 )
+
+var logMessageLevel = ErrorMessage
+var logMessageLevelMutex = new(sync.RWMutex)
+
+func Set(l LogLevel) {
+	logMessageLevelMutex.Lock()
+	defer logMessageLevelMutex.Unlock()
+
+	logMessageLevel = l
+}
+
+//Log a message if the level is below or equal to the set LogMessageLevel
+func Log(message interface{}, messagelevel LogLevel) {
+	logMessageLevelMutex.RLock()
+	defer logMessageLevelMutex.RUnlock()
+
+	if messagelevel <= logMessageLevel {
+		log.Printf("%v: %v\n", messagelevel, message)
+	}
+}
 
 func (l LogLevel) String() string {
 	switch l {
