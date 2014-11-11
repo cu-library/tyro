@@ -6,15 +6,15 @@ package tokenstore
 
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-	"io/ioutil"
-	"log"
 )
 
-func init(){
+func init() {
 	log.SetOutput(ioutil.Discard)
 }
 

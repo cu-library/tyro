@@ -3,8 +3,8 @@ package loglevel
 import (
 	"gopkg.in/cudevmaxwell-vendor/lumberjack.v2"
 	"log"
-	"sync"
 	"os"
+	"sync"
 )
 
 type LogLevel int
@@ -84,11 +84,11 @@ func SetupLumberjack(logFileLocation string, logMaxSize, logMaxBackups, logMaxAg
 			MaxBackups: logMaxBackups,
 			MaxAge:     logMaxAge,
 		}
-		if _, err := lj.Write([]byte("Stating...\n")); err != nil{
+		if _, err := lj.Write([]byte("Stating...\n")); err != nil {
 			log.Fatalf("Unable to open logfile %v", logFileLocation)
-		} else{
+		} else {
 			log.SetOutput(lj)
-		}		
+		}
 	} else {
 		log.SetOutput(os.Stdout)
 	}
