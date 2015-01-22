@@ -6,7 +6,7 @@
 
 ##Setup: 
 
-Tyro is a standalone executable, written in Go. It should compile in Go 1.3.3. 
+Tyro is a standalone executable, written in Go. It should compile in Go 1.3.3 and higher. 
 A web server like Nginx or Apache is not required to use it.
 
     ./tyro -key=yourclientkey -secret=yourclientsecret -url=yourapiurl
