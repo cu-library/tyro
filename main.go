@@ -26,6 +26,8 @@ import (
 	"path"
 	"strings"
 	"time"
+    "sync"
+    "strconv"
 )
 
 const (
@@ -42,6 +44,12 @@ const (
 	DefaultACAOHeader string = "*"
 )
 
+type NewCache struct{
+    Added time.Time
+    Value []byte
+    sync.RWMutex
+}
+
 var (
 	address      = flag.String("address", DefaultAddress, "Address for the server to bind on.")
 	apiURL       = flag.String("url", sierraapi.DefaultURL, "API url.")
@@ -51,6 +59,8 @@ var (
 	clientSecret = flag.String("secret", "", "Client Secret")
 	headerACAO   = flag.String("acaoheader", DefaultACAOHeader, "Access-Control-Allow-Origin Header for CORS. Multiple origins separated by ;")
 	raw          = flag.Bool("raw", DefaultRawAccess, "Allow access to the raw Sierra API under /raw/")
+    newLimit     = flag.Int("newlimit", 16, "The number of items to serve from the /new endpoint.")
+    newDays     = flag.Int("newdays", 10, "The number of days in the past to look back for new items on the /new endpoint.")
 
 	logFileLocation = flag.String("logfile", l.DefaultLogFileLocation, "Log file. By default, log messages will be printed to stdout.")
 	logMaxSize      = flag.Int("logmaxsize", l.DefaultLogMaxSize, "The maximum size of log files before they are rotated, in megabytes.")
@@ -59,6 +69,8 @@ var (
 	logLevel        = flag.String("loglevel", "warn", "The maximum log level which will be logged. error < warn < info < debug < trace. For example, trace will log everything, info will log info, warn, and error.")
 
 	tokenStore = tokenstore.NewTokenStore()
+
+    cache = new(NewCache)
 )
 
 func init() {
@@ -74,7 +86,7 @@ func init() {
 		})
 
 		fmt.Fprintln(os.Stderr, "If a certificate file is provided, Tyro will attempt to use HTTPS.")
-		fmt.Fprintln(os.Stderr, "The Access-Control-Allow-Origin header for CORS is only set for the /status/bib/[bibID] and /status/item/[itemID] endpoints.")
+		fmt.Fprintln(os.Stderr, "The Access-Control-Allow-Origin header for CORS is only set for the /status/bib/[bibID], /status/item/[itemID] and /new endpoints.")
 	}
 }
 
@@ -128,6 +140,7 @@ func main() {
 	http.HandleFunc("/status/", statusHandler)
 	http.HandleFunc("/status/item/", statusItemHandler)
 	http.HandleFunc("/status/bib/", statusBibHandler)
+    http.HandleFunc("/new", newBibsHandler)
 	if *raw {
 		l.Log("Allowing access to raw Sierra API.", l.WarnMessage)
 		rawProxy := httputil.NewSingleHostReverseProxy(&url.URL{})
@@ -189,6 +202,12 @@ func statusItemHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+    q := parsedAPIURL.Query()
+    q.Set("suppressed", "false")
+    q.Set("deleted", "false")
+    parsedAPIURL.RawQuery = q.Encode()
+
+
 	resp, err := sierraapi.SendRequestToAPI(parsedAPIURL.String(), token, w, r)
 	if err != nil {
 		l.Log(fmt.Sprintf("Internal Server Error at /status/item/, %v", err), l.ErrorMessage)
@@ -220,7 +239,7 @@ func statusItemHandler(w http.ResponseWriter, r *http.Request) {
 
 	l.Log(fmt.Sprintf("Sending response at /status/item handler: %v", responseJSON.Convert()), l.TraceMessage)
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
 	w.Write(finalJSON)
 
 }
@@ -253,6 +272,7 @@ func statusBibHandler(w http.ResponseWriter, r *http.Request) {
 	q := parsedAPIURL.Query()
 	q.Set("bibIds", bibID)
 	q.Set("deleted", "false")
+    q.Set("suppressed", "false")
 	parsedAPIURL.RawQuery = q.Encode()
 
 	resp, err := sierraapi.SendRequestToAPI(parsedAPIURL.String(), token, w, r)
@@ -286,8 +306,85 @@ func statusBibHandler(w http.ResponseWriter, r *http.Request) {
 
 	l.Log(fmt.Sprintf("Sending response at /status/bib/ handler: %v", responseJSON.Convert()), l.TraceMessage)
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
 	w.Write(finalJSON)
+
+}
+
+func newBibsHandler(w http.ResponseWriter, r *http.Request) {
+
+    setACAOHeader(w, r, *headerACAO)
+
+    cache.RLock()    
+    if cache.Added.Add(time.Duration(5)*time.Minute).After(time.Now()){
+        l.Log("Serving cached version of new bibs", l.DebugMessage)
+        w.Header().Set("Content-Type", "application/json;charset=UTF-8")
+        w.Write(cache.Value)
+        cache.RUnlock()
+        return
+    }
+    cache.RUnlock()
+
+    token, err := getTokenOrError(w, r)
+    if err != nil {
+        l.Log(err, l.ErrorMessage)
+        return
+    }
+
+    parsedAPIURL, err := parseURLandJoinToPath(*apiURL, sierraapi.BibRequestEndpoint)
+    if err != nil {
+        http.Error(w, "Server Error.", http.StatusInternalServerError)
+        l.Log("Internal Server Error at /new handler, unable to parse url.", l.DebugMessage)
+        return
+    }   
+
+    q := parsedAPIURL.Query()
+    q.Set("limit", strconv.Itoa(*newLimit))
+    q.Set("deleted", "false")
+    q.Set("createdDate", fmt.Sprintf("[%v,]", time.Now().AddDate(0,0,*newDays * -1).Format(time.RFC3339)))
+    q.Set("fields", "marc,default")
+    q.Set("suppressed", "false")
+    parsedAPIURL.RawQuery = q.Encode()
+
+    resp, err := sierraapi.SendRequestToAPI(parsedAPIURL.String(), token, w, r)
+    if err != nil {
+        l.Log(fmt.Sprintf("Internal Server Error at /new, %v", err), l.ErrorMessage)
+        return
+    }
+    if resp.StatusCode == http.StatusUnauthorized {
+        http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
+        tokenStore.Refresh <- struct{}{}
+        l.Log("Token is out of date.", l.ErrorMessage)
+        return
+    }
+
+    var responseJSON sierraapi.BibRecordsIn
+
+    err = json.NewDecoder(resp.Body).Decode(&responseJSON)
+
+    defer resp.Body.Close()
+    if err != nil {
+        http.Error(w, "JSON Decoding Error", http.StatusInternalServerError)
+        l.Log(fmt.Sprintf("Internal Server Error at /new handler, JSON Decoding Error: %v", err), l.WarnMessage)
+        return
+    }
+
+    finalJSON, err := json.Marshal(responseJSON.Convert())
+    if err != nil {
+        http.Error(w, "JSON Encoding Error", http.StatusInternalServerError)
+        l.Log(fmt.Sprintf("Internal Server Error at /new handler, JSON Encoding Error: %v", err), l.WarnMessage)
+        return
+    }
+
+    l.Log(fmt.Sprintf("Sending response at /new handler: %v", responseJSON.Convert()), l.TraceMessage)
+
+    w.Header().Set("Content-Type", "application/json;charset=UTF-8 ")
+    w.Write(finalJSON)
+
+    cache.Lock()
+    defer cache.Unlock()
+    cache.Value = finalJSON
+    cache.Added = time.Now()
 
 }
 

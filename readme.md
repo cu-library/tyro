@@ -34,12 +34,14 @@ These options are optional:
     -logmaxbackups= : The maximum number of old log files to keep.
     -logmaxsize= : The maximum size of log files before they are rotated, in megabytes.
     -loglevel= : The log level. One of error, warn, info, debug, or trace. 
+    -newlimit= : The number of items to return at the /new endpoint
 
 These flags can also be supplied by environment variables:
 
     TYRO_ADDRESS, TYRO_KEY, TYRO_SECRET, TYRO_URL, TYRO_RAW
     TYRO_CERTFILE, TYRO_KEYFILE, TYRO_ACAOHEADER, 
     TYRO_LOGLEVEL, TYRO_LOGFILE, TYRO_LOGMAXAGE, TYRO_LOGMAXBACKUPS, TYRO_LOGMAXSIZE
+    TYRO_NEWLIMIT
 
 This [Twelve-Factor](http://12factor.net/) style should make it easy to daemonize or Docker-ize this app. 
 The TYRO_RAW environment variable, if set, should be True or False.
@@ -66,12 +68,25 @@ Tyro provides the following URLs (endpoints?, routes?)
             Status: "IN LIBRARY",
             Location: "Floor 4 Books"
         }
+    /new : A list of new bib records, returns a JSON doc like:
+        [
+            {
+               BidID: 7777777,
+               TitleAndAuthor: "A Title /An Author.",
+               ISBNs: [
+               "1111111111113",
+               "11111111111"
+               ],
+               CreatedDate: "2015-01-22T08:00:00Z"
+            },
+        ...
+        ]
 
 This extra endpoint will be provided if `-raw` is passed as a flag or the `TYRO_RAW` environment variable is set to True.
 
     /raw : A thin wrapper around the Sierra API. Tyro will take care of the bearer tokens and X-Forwarded-For header. 
 
-The `/status/bib/[bibID]` and `/status/item/[itemID]` endpoints are the only ones that will respect the Access-Control-Allow-Origin header. 
+The `/status/bib/[bibID]`, `/status/item/[itemID]` and `/new` endpoints are the only ones that will respect the Access-Control-Allow-Origin header. 
 If the 'raw' setting is turned on, requests sent to `/raw/` will receive whatever the Sierra API would return if the client had authenticated itself. 
 
 This software is now in beta. Please create issues for bugs or feature requests. 

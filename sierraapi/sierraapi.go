@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"sort"
 )
 
 const (
@@ -19,6 +20,7 @@ const (
 
 	//API Endpoints
 	TokenRequestEndpoint string = "token"
+	BibRequestEndpoint   string = "bibs"
 	ItemRequestEndpoint  string = "items"
 )
 
@@ -72,9 +74,92 @@ func (in *ItemRecordsIn) Convert() *ItemRecordsOut {
 	return out
 }
 
+type BibRecordIn struct {
+	ID   int `json:"id"`
+	CreatedDate time.Time `json:"createdDate"`
+	Marc struct {
+		Fields []struct {
+			Data struct {
+				Subfields []struct {
+					Code string `json:"code"`
+					Data string `json:"data"`
+				} `json:"subfields"`
+			} `json:"data"`
+			Tag string `json:"tag"`
+		} `json:"fields"`
+		Leader string `json:"leader"`
+	} `json:"marc"`
+}
+
+type BibRecordOut struct {
+	BidID           int
+	TitleAndAuthor  string
+	ISBNs           []string
+	CreatedDate     time.Time
+}
+
+
+type BibRecordsIn struct {
+	Entries []BibRecordIn `json:"entries"`
+}
+
+type BibRecordsOut []BibRecordOut
+
+
+func (records BibRecordsOut) Len() int {
+	return len(records)
+}
+func (records BibRecordsOut) Less(i, j int) bool {
+    return records[i].CreatedDate.Before(records[j].CreatedDate)
+}
+
+func (records BibRecordsOut) Swap(i, j int) {
+    records[i], records[j] = records[j], records[i]
+}
+
+func (in *BibRecordIn) Convert() *BibRecordOut {
+
+	out := new(BibRecordOut)
+   
+    out.BidID = in.ID
+    out.CreatedDate = in.CreatedDate
+
+    for _, field := range in.Marc.Fields {
+    	if field.Tag == "245" {
+    		for _, subfield := range field.Data.Subfields {
+    			out.TitleAndAuthor += subfield.Data
+    		}
+    	}
+    	if field.Tag == "020" {
+    		for _, subfield := range field.Data.Subfields {
+    			if subfield.Code == "a"{
+    				isbnField := strings.Split(subfield.Data, " ")
+    				if len(isbnField) > 1 {
+    					out.ISBNs = append(out.ISBNs, isbnField[0])
+    				} else {
+            	        out.ISBNs = append(out.ISBNs, subfield.Data)
+    				}
+    			}
+    		}
+    	}	
+    }
+
+	return out
+}
+
+func (in *BibRecordsIn) Convert() *BibRecordsOut {
+	out := BibRecordsOut{}
+	for _, bibRecord := range in.Entries {
+		out = append(out, *bibRecord.Convert())
+	}
+
+	sort.Sort(sort.Reverse(out))
+	return &out
+}
+
 func SendRequestToAPI(apiURL, token string, w http.ResponseWriter, r *http.Request) (*http.Response, error) {
 
-	l.Log("Sending request to Sierra API with token "+token, l.TraceMessage)
+	l.Log(fmt.Sprintf("Sending request %v to Sierra API with token %v", apiURL, token), l.TraceMessage)
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
