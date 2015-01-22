@@ -167,8 +167,8 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 func statusItemHandler(w http.ResponseWriter, r *http.Request) {
 
-    setACAOHeader(w, r, *headerACAO)
-    
+	setACAOHeader(w, r, *headerACAO)
+
 	token, err := getTokenOrError(w, r)
 	if err != nil {
 		l.Log(err, l.ErrorMessage)
@@ -227,7 +227,7 @@ func statusItemHandler(w http.ResponseWriter, r *http.Request) {
 
 func statusBibHandler(w http.ResponseWriter, r *http.Request) {
 
-    setACAOHeader(w, r, *headerACAO)
+	setACAOHeader(w, r, *headerACAO)
 
 	token, err := getTokenOrError(w, r)
 	if err != nil {
