@@ -167,6 +167,8 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 func statusItemHandler(w http.ResponseWriter, r *http.Request) {
 
+    setACAOHeader(w, r, *headerACAO)
+    
 	token, err := getTokenOrError(w, r)
 	if err != nil {
 		l.Log(err, l.ErrorMessage)
@@ -216,8 +218,6 @@ func statusItemHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setACAOHeader(w, r, *headerACAO)
-
 	l.Log(fmt.Sprintf("Sending response at /status/item handler: %v", responseJSON.Convert()), l.TraceMessage)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -226,6 +226,8 @@ func statusItemHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func statusBibHandler(w http.ResponseWriter, r *http.Request) {
+
+    setACAOHeader(w, r, *headerACAO)
 
 	token, err := getTokenOrError(w, r)
 	if err != nil {
@@ -281,8 +283,6 @@ func statusBibHandler(w http.ResponseWriter, r *http.Request) {
 		l.Log(fmt.Sprintf("Internal Server Error at /status/bib/ handler, JSON Encoding Error: %v", err), l.WarnMessage)
 		return
 	}
-
-	setACAOHeader(w, r, *headerACAO)
 
 	l.Log(fmt.Sprintf("Sending response at /status/bib/ handler: %v", responseJSON.Convert()), l.TraceMessage)
 
