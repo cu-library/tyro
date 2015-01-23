@@ -26,7 +26,6 @@ import (
 	"path"
 	"strings"
 	"time"
-    "sync"
     "sort"
     "strconv"
 )
@@ -44,12 +43,6 @@ const (
 	//The default Access-Control-Allow-Origin header (CORS)
 	DefaultACAOHeader string = "*"
 )
-
-type NewCache struct{
-    Added time.Time
-    Value []byte
-    sync.RWMutex
-}
 
 var (
 	address      = flag.String("address", DefaultAddress, "Address for the server to bind on.")
@@ -69,8 +62,6 @@ var (
 	logLevel        = flag.String("loglevel", "warn", "The maximum log level which will be logged. error < warn < info < debug < trace. For example, trace will log everything, info will log info, warn, and error.")
 
 	tokenStore = tokenstore.NewTokenStore()
-
-    cache = new(NewCache)
 )
 
 func init() {
@@ -315,16 +306,6 @@ func newBibsHandler(w http.ResponseWriter, r *http.Request) {
 
     setACAOHeader(w, r, *headerACAO)
 
-    cache.RLock()    
-    if cache.Added.Add(time.Duration(5)*time.Minute).After(time.Now()){
-        l.Log("Serving cached version of new bibs", l.DebugMessage)
-        w.Header().Set("Content-Type", "application/json;charset=UTF-8")
-        w.Write(cache.Value)
-        cache.RUnlock()
-        return
-    }
-    cache.RUnlock()
-
     entries := make(map[int]sierraapi.BibRecordOut)
 
     entries, err := getNewItems(entries, time.Now(), w, r)
@@ -351,12 +332,6 @@ func newBibsHandler(w http.ResponseWriter, r *http.Request) {
 
     w.Header().Set("Content-Type", "application/json;charset=UTF-8 ")
     w.Write(finalJSON)
-
-    cache.Lock()
-    defer cache.Unlock()
-    cache.Value = finalJSON
-    cache.Added = time.Now()
-
 }
 
 func getNumberOfEntries(date time.Time, w http.ResponseWriter, r *http.Request) (int, error){

@@ -7,7 +7,8 @@
 ##Setup: 
 
 Tyro is a standalone executable, written in Go. It should compile in Go 1.3.3 and higher. 
-A web server like Nginx or Apache is not required to use it.
+A web server like Nginx or Apache is not required to use it, but in a production environment serving behind nginx with a
+reverse cache is recommended. 
 
     ./tyro -key=yourclientkey -secret=yourclientsecret -url=yourapiurl
 
