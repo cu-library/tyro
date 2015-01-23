@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
     "sync"
+    "sort"
     "strconv"
 )
 
@@ -60,7 +61,6 @@ var (
 	headerACAO   = flag.String("acaoheader", DefaultACAOHeader, "Access-Control-Allow-Origin Header for CORS. Multiple origins separated by ;")
 	raw          = flag.Bool("raw", DefaultRawAccess, "Allow access to the raw Sierra API under /raw/")
     newLimit     = flag.Int("newlimit", 16, "The number of items to serve from the /new endpoint.")
-    newDays     = flag.Int("newdays", 10, "The number of days in the past to look back for new items on the /new endpoint.")
 
 	logFileLocation = flag.String("logfile", l.DefaultLogFileLocation, "Log file. By default, log messages will be printed to stdout.")
 	logMaxSize      = flag.Int("logmaxsize", l.DefaultLogMaxSize, "The maximum size of log files before they are rotated, in megabytes.")
@@ -325,58 +325,29 @@ func newBibsHandler(w http.ResponseWriter, r *http.Request) {
     }
     cache.RUnlock()
 
-    token, err := getTokenOrError(w, r)
+    entries := make(map[int]sierraapi.BibRecordOut)
+
+    entries, err := getNewItems(entries, time.Now(), w, r)
     if err != nil {
-        l.Log(err, l.ErrorMessage)
         return
     }
 
-    parsedAPIURL, err := parseURLandJoinToPath(*apiURL, sierraapi.BibRequestEndpoint)
-    if err != nil {
-        http.Error(w, "Server Error.", http.StatusInternalServerError)
-        l.Log("Internal Server Error at /new handler, unable to parse url.", l.DebugMessage)
-        return
-    }   
+    var response sierraapi.BibRecordsOut
 
-    q := parsedAPIURL.Query()
-    q.Set("limit", strconv.Itoa(*newLimit))
-    q.Set("deleted", "false")
-    q.Set("createdDate", fmt.Sprintf("[%v,]", time.Now().AddDate(0,0,*newDays * -1).Format(time.RFC3339)))
-    q.Set("fields", "marc,default")
-    q.Set("suppressed", "false")
-    parsedAPIURL.RawQuery = q.Encode()
-
-    resp, err := sierraapi.SendRequestToAPI(parsedAPIURL.String(), token, w, r)
-    if err != nil {
-        l.Log(fmt.Sprintf("Internal Server Error at /new, %v", err), l.ErrorMessage)
-        return
-    }
-    if resp.StatusCode == http.StatusUnauthorized {
-        http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
-        tokenStore.Refresh <- struct{}{}
-        l.Log("Token is out of date.", l.ErrorMessage)
-        return
+    for _, entry := range entries {
+        response = append(response, entry)
     }
 
-    var responseJSON sierraapi.BibRecordsIn
+    sort.Sort(sort.Reverse(response))
 
-    err = json.NewDecoder(resp.Body).Decode(&responseJSON)
-
-    defer resp.Body.Close()
-    if err != nil {
-        http.Error(w, "JSON Decoding Error", http.StatusInternalServerError)
-        l.Log(fmt.Sprintf("Internal Server Error at /new handler, JSON Decoding Error: %v", err), l.WarnMessage)
-        return
-    }
-
-    finalJSON, err := json.Marshal(responseJSON.Convert())
+    finalJSON, err := json.Marshal(response)
     if err != nil {
         http.Error(w, "JSON Encoding Error", http.StatusInternalServerError)
         l.Log(fmt.Sprintf("Internal Server Error at /new handler, JSON Encoding Error: %v", err), l.WarnMessage)
         return
     }
 
-    l.Log(fmt.Sprintf("Sending response at /new handler: %v", responseJSON.Convert()), l.TraceMessage)
+    l.Log(fmt.Sprintf("Sending response at /new handler: %v", response), l.TraceMessage)
 
     w.Header().Set("Content-Type", "application/json;charset=UTF-8 ")
     w.Write(finalJSON)
@@ -385,6 +356,127 @@ func newBibsHandler(w http.ResponseWriter, r *http.Request) {
     defer cache.Unlock()
     cache.Value = finalJSON
     cache.Added = time.Now()
+
+}
+
+func getNumberOfEntries(date time.Time, w http.ResponseWriter, r *http.Request) (int, error){
+
+    type totalResponse struct {
+       Total int `json:"total"`
+    }
+
+    token, err := getTokenOrError(w, r)
+    if err != nil {
+        l.Log(err, l.ErrorMessage)
+        return 0, err
+    }
+
+    parsedAPIURL, err := parseURLandJoinToPath(*apiURL, sierraapi.BibRequestEndpoint)
+    if err != nil {
+        http.Error(w, "Server Error.", http.StatusInternalServerError)
+        l.Log("Internal Server Error at /new handler, unable to parse url.", l.DebugMessage)
+        return 0, err
+    }   
+
+    q := parsedAPIURL.Query()
+    q.Set("limit", "1")
+    q.Set("offset", "0")
+    q.Set("deleted", "false")
+    q.Set("suppressed", "false")
+    q.Set("createdDate", fmt.Sprintf("[%v,%v]", date.AddDate(0,0,-1).Format(time.RFC3339), date.Format(time.RFC3339)))
+    q.Set("fields", "default")
+    parsedAPIURL.RawQuery = q.Encode()
+
+    resp, err := sierraapi.SendRequestToAPI(parsedAPIURL.String(), token, w, r)
+    if err != nil {
+        l.Log(fmt.Sprintf("Internal Server Error at /new, %v", err), l.ErrorMessage)
+        return 0, err
+    }
+    if resp.StatusCode == http.StatusUnauthorized {
+        http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
+        tokenStore.Refresh <- struct{}{}
+        l.Log("Token is out of date.", l.ErrorMessage)
+        return 0, errors.New("Unauthorized")
+    }
+
+    var response totalResponse
+
+    err = json.NewDecoder(resp.Body).Decode(&response)
+
+    return response.Total, nil
+
+}
+
+func getNewItems(alreadyProcessed map[int]sierraapi.BibRecordOut, date time.Time, w http.ResponseWriter, r *http.Request) (map[int]sierraapi.BibRecordOut, error){
+
+    token, err := getTokenOrError(w, r)
+    if err != nil {
+        l.Log(err, l.ErrorMessage)
+        return nil, err
+    }
+
+    parsedAPIURL, err := parseURLandJoinToPath(*apiURL, sierraapi.BibRequestEndpoint)
+    if err != nil {
+        http.Error(w, "Server Error.", http.StatusInternalServerError)
+        l.Log("Internal Server Error at /new handler, unable to parse url.", l.DebugMessage)
+        return nil, err
+    }   
+
+    total, err := getNumberOfEntries(date, w , r)
+    if err != nil {
+      return nil, err
+    } 
+    offset := 0
+    needOneMoreDay := false
+
+    if total >= *newLimit {
+        offset = total-*newLimit
+    } else {
+        needOneMoreDay = true
+    }
+
+    q := parsedAPIURL.Query()
+    q.Set("offset", strconv.Itoa(offset))
+    q.Set("deleted", "false")
+    q.Set("createdDate", fmt.Sprintf("[%v,%v]", date.AddDate(0,0,-1).Format(time.RFC3339), date.Format(time.RFC3339)))
+    q.Set("fields", "marc,default")
+    q.Set("suppressed", "false")
+    parsedAPIURL.RawQuery = q.Encode()
+
+    resp, err := sierraapi.SendRequestToAPI(parsedAPIURL.String(), token, w, r)
+    if err != nil {
+        l.Log(fmt.Sprintf("Internal Server Error at /new, %v", err), l.ErrorMessage)
+        return nil, err
+    }
+    if resp.StatusCode == http.StatusUnauthorized {
+        http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
+        tokenStore.Refresh <- struct{}{}
+        l.Log("Token is out of date.", l.ErrorMessage)
+        return nil, err
+    }
+
+    var response sierraapi.BibRecordsIn
+
+    err = json.NewDecoder(resp.Body).Decode(&response)
+
+    defer resp.Body.Close()
+    if err != nil {
+        http.Error(w, "JSON Decoding Error", http.StatusInternalServerError)
+        l.Log(fmt.Sprintf("Internal Server Error at /new handler, JSON Decoding Error: %v", err), l.WarnMessage)
+        return nil, err
+    }
+
+    entries := response.Convert()
+
+    for _, entry := range *entries {
+        alreadyProcessed[entry.BibID] = entry
+    }
+
+    if needOneMoreDay {
+        return getNewItems(alreadyProcessed, date.Add(time.Duration(1435)*time.Minute * -1), w, r)
+    } else {
+        return alreadyProcessed, nil
+    }
 
 }
 

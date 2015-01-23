@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"sort"
 )
 
 const (
@@ -92,7 +91,7 @@ type BibRecordIn struct {
 }
 
 type BibRecordOut struct {
-	BidID           int
+	BibID           int
 	TitleAndAuthor  string
 	ISBNs           []string
 	CreatedDate     time.Time
@@ -110,7 +109,11 @@ func (records BibRecordsOut) Len() int {
 	return len(records)
 }
 func (records BibRecordsOut) Less(i, j int) bool {
-    return records[i].CreatedDate.Before(records[j].CreatedDate)
+	if records[i].CreatedDate == records[j].CreatedDate {
+        return records[i].BibID < records[j].BibID
+	} else {
+        return records[i].CreatedDate.Before(records[j].CreatedDate)
+    }
 }
 
 func (records BibRecordsOut) Swap(i, j int) {
@@ -121,7 +124,7 @@ func (in *BibRecordIn) Convert() *BibRecordOut {
 
 	out := new(BibRecordOut)
    
-    out.BidID = in.ID
+    out.BibID = in.ID
     out.CreatedDate = in.CreatedDate
 
     for _, field := range in.Marc.Fields {
@@ -152,8 +155,6 @@ func (in *BibRecordsIn) Convert() *BibRecordsOut {
 	for _, bibRecord := range in.Entries {
 		out = append(out, *bibRecord.Convert())
 	}
-
-	sort.Sort(sort.Reverse(out))
 	return &out
 }
 
