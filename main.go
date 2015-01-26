@@ -67,7 +67,7 @@ var (
 func init() {
 
 	flag.Usage = func() {
-		fmt.Fprint(os.Stderr, "Tyro: A helper for Sierra APIs\n\n")
+		fmt.Fprint(os.Stderr, "Tyro: A helper for Sierra APIs\nVersion 0.7.4\n\n")
 		flag.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "  The possible environment variables:")
 
