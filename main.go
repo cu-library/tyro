@@ -67,7 +67,7 @@ var (
 func init() {
 
 	flag.Usage = func() {
-		fmt.Fprint(os.Stderr, "Tyro: A helper for Sierra APIs\nVersion 0.7.4\n\n")
+		fmt.Fprint(os.Stderr, "Tyro: A helper for Sierra APIs\nVersion 0.7.5\n\n")
 		flag.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "  The possible environment variables:")
 
@@ -210,7 +210,7 @@ func statusItemHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if resp.StatusCode == http.StatusNotFound {
-		http.Error(w, "No item records for that ItemID.", http.StatusInternalServerError)
+		http.Error(w, "No item records for that ItemID.", http.StatusNotFound)
 		l.Log(fmt.Sprintf("No items records match ItemID %v", itemID), l.TraceMessage)
 		return
 	}
@@ -282,7 +282,7 @@ func statusBibHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if resp.StatusCode == http.StatusNotFound {
-		http.Error(w, "No item records for that BibID.", http.StatusInternalServerError)
+		http.Error(w, "No item records for that BibID.", http.StatusNotFound)
 		l.Log(fmt.Sprintf("No items records match BibID %v", bibID), l.TraceMessage)
 		return
 	}
