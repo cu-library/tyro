@@ -209,6 +209,11 @@ func statusItemHandler(w http.ResponseWriter, r *http.Request) {
 		l.Log("Token is out of date.", l.ErrorMessage)
 		return
 	}
+	if resp.StatusCode == http.StatusNotFound {
+		http.Error(w, "No item records for that ItemID.", http.StatusInternalServerError)
+		l.Log(fmt.Sprintf("No items records match ItemID %v", itemID), l.TraceMessage)
+		return
+	}
 
 	var responseJSON sierraapi.ItemRecordIn
 
@@ -274,6 +279,11 @@ func statusBibHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Token is out of date, or is refreshing. Try request again.", http.StatusInternalServerError)
 		tokenStore.Refresh <- struct{}{}
 		l.Log("Token is out of date.", l.ErrorMessage)
+		return
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		http.Error(w, "No item records for that BibID.", http.StatusInternalServerError)
+		l.Log(fmt.Sprintf("No items records match BibID %v", bibID), l.TraceMessage)
 		return
 	}
 
