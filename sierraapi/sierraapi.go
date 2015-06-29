@@ -168,6 +168,8 @@ func SendRequestToAPI(apiURL, token string, w http.ResponseWriter, r *http.Reque
 		return new(http.Response), err
 	}
 
+        req.Close = true
+
 	err = SetAuthorizationHeaders(req, r, token)
 	if err != nil {
 		l.Log("The remote address in an incoming request is not set properly.", l.WarnMessage)

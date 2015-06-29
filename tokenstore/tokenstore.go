@@ -133,6 +133,7 @@ func (t *TokenStore) refresh(tokenURL, clientKey, clientSecret string) (int, err
 	}
 	getTokenRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	getTokenRequest.SetBasicAuth(clientKey, clientSecret)
+        getTokenRequest.Close = true
 	client := new(http.Client)
 	resp, err := client.Do(getTokenRequest)
 	if err != nil {
